@@ -1,0 +1,15 @@
+[package]
+name = "praxis"
+edition = "2024"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace   = true
+
+praxis-core      = { path = "../praxis-core" }
+praxis-lang-rust = { path = "../praxis-lang-rust" }
+praxis-lang-go   = { path = "../praxis-lang-go" }
+praxis-lang-ts   = { path = "../praxis-lang-ts" }
