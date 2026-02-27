@@ -538,6 +538,7 @@ dependencies = [
  "ignore",
  "indexmap",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

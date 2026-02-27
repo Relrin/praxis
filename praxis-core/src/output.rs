@@ -2,7 +2,7 @@ use indexmap::IndexMap;
 use serde::Serialize;
 
 use crate::inclusion::{IncludedFile, InclusionMode};
-use crate::types::{Dependency, Symbol, SymbolKind, Visibility};
+use crate::types::{Dependency, Symbol, SymbolKind};
 use crate::budget::BudgetBreakdown;
 
 const SCHEMA_VERSION: &str = "0.1";
@@ -198,15 +198,15 @@ fn build_symbol_graph(symbols: &[Symbol]) -> SymbolGraph {
     }
 
     SymbolGraph {
-        functions: groups.remove("functions").unwrap(),
-        structs: groups.remove("structs").unwrap(),
-        classes: groups.remove("classes").unwrap(),
-        enums: groups.remove("enums").unwrap(),
-        traits: groups.remove("traits").unwrap(),
-        interfaces: groups.remove("interfaces").unwrap(),
-        modules: groups.remove("modules").unwrap(),
-        methods: groups.remove("methods").unwrap(),
-        constants: groups.remove("constants").unwrap(),
+        functions: groups.swap_remove("functions").unwrap_or_default(),
+        structs: groups.swap_remove("structs").unwrap_or_default(),
+        classes: groups.swap_remove("classes").unwrap_or_default(),
+        enums: groups.swap_remove("enums").unwrap_or_default(),
+        traits: groups.swap_remove("traits").unwrap_or_default(),
+        interfaces: groups.swap_remove("interfaces").unwrap_or_default(),
+        modules: groups.swap_remove("modules").unwrap_or_default(),
+        methods: groups.swap_remove("methods").unwrap_or_default(),
+        constants: groups.swap_remove("constants").unwrap_or_default(),
     }
 }
 
