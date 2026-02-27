@@ -6,3 +6,7 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+syn = "2.0.117"
+toml = "1.0.3"
+
+praxis-core = { path = "../praxis-core" }

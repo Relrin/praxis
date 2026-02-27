@@ -6,3 +6,7 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+regex.workspace = true
+serde_json.workspace = true
+
+praxis-core = { path = "../praxis-core" }
