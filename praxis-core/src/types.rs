@@ -1,7 +1,9 @@
-use indexmap::IndexMap;
-use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::PathBuf;
+
+use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
+
 
 /// Represents a code symbol's kind across all supported languages.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

@@ -2,6 +2,7 @@ use std::path::Path;
 
 use crate::types::{Dependency, FileEntry, Symbol};
 
+
 /// Defines the interface for language-specific code analysis.
 ///
 /// Each language plugin implements this trait to provide symbol extraction,
