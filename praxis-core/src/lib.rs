@@ -1,6 +1,8 @@
 pub mod budget;
 pub mod inclusion;
 pub mod types;
+pub mod markdown;
+pub mod output;
 pub mod plugin;
 pub mod scanner;
 pub mod scorer;

@@ -11,3 +11,4 @@ git2.workspace = true
 ignore.workspace = true
 indexmap.workspace = true
 serde.workspace = true
+serde_json.workspace = true
