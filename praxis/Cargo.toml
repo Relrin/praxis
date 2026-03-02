@@ -5,6 +5,10 @@ version.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[[bin]]
+name = "praxis"
+path = "src/main.rs"
+
 [dependencies]
 anyhow.workspace = true
 clap.workspace   = true
