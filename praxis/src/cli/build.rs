@@ -13,7 +13,10 @@ use praxis_core::plugin::PluginRegistry;
 use praxis_core::scanner::{scan_repository, ScanConfig};
 use praxis_core::scorer::{score_file, sort_scored_files, ScoredFile};
 use praxis_core::tokenizer::tokenize_text;
+use praxis_core::tree::render_file_tree;
 use praxis_core::types::FileEntry;
+
+
 
 #[derive(Parser)]
 pub struct BuildArgs {
@@ -132,9 +135,24 @@ pub fn execute(args: BuildArgs) -> Result<()> {
 
     let repo_summary = build_repo_summary(&index.files, &plugins);
 
+    let file_paths: Vec<String> = index
+        .files
+        .iter()
+        .map(|f| f.path.to_string_lossy().replace('\\', "/"))
+        .collect();
+
+    let repo_name = args
+        .repo
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "repo".to_string());
+
+    let file_tree = render_file_tree(&file_paths, &repo_name);
+
     let bundle = build_context_bundle(
         args.task.clone(),
         repo_summary,
+        file_tree,
         &included,
         &index.symbols,
         &index.dependencies,

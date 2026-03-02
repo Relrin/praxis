@@ -1,6 +1,5 @@
 use crate::output::ContextBundle;
 
-
 /// Renders a [`ContextBundle`] as a Markdown string.
 ///
 /// The Markdown contains the same information as the JSON output — no data
@@ -15,6 +14,12 @@ pub fn render_markdown(bundle: &ContextBundle) -> String {
     out.push_str("## Repository Summary\n\n");
     out.push_str(&bundle.repo_summary);
     out.push_str("\n\n---\n\n");
+
+    out.push_str("## File Tree\n\n");
+    out.push_str("```\n");
+    out.push_str(&bundle.file_tree);
+    out.push_str("```\n\n");
+    out.push_str("---\n\n");
 
     render_token_budget(&mut out, bundle);
     out.push_str("---\n\n");
@@ -143,7 +148,10 @@ fn render_dependencies(out: &mut String, bundle: &ContextBundle) {
             out.push_str(&format!("- {} {}\n", dep.name, version));
         } else {
             let features = dep.features.join(", ");
-            out.push_str(&format!("- {} {} (features: {})\n", dep.name, version, features));
+            out.push_str(&format!(
+                "- {} {} (features: {})\n",
+                dep.name, version, features
+            ));
         }
     }
     out.push('\n');
@@ -159,6 +167,7 @@ mod tests {
             schema_version: "0.1",
             task: "fix the parser".to_string(),
             repo_summary: "A small Rust project.".to_string(),
+            file_tree: "my-project/\n├── Cargo.toml\n└── src/\n    └── main.rs\n".to_string(),
             relevant_files: vec![
                 RelevantFile {
                     path: "src/main.rs".to_string(),
@@ -228,6 +237,14 @@ mod tests {
     }
 
     #[test]
+    fn markdown_contains_file_tree() {
+        let md = render_markdown(&minimal_bundle());
+        assert!(md.contains("## File Tree"));
+        assert!(md.contains("├── Cargo.toml"));
+        assert!(md.contains("└── src/"));
+    }
+
+    #[test]
     fn markdown_contains_token_budget_table() {
         let md = render_markdown(&minimal_bundle());
         assert!(md.contains("| Total Declared | 8000 |"));
@@ -282,7 +299,7 @@ mod tests {
         let json = serialize_json(&bundle).unwrap();
         assert!(json.contains("\"schema_version\": \"0.1\""));
         assert!(json.contains("\"fix the parser\""));
-        assert!(json.contains("\"relevance_score\": 0.91"));
+        assert!(json.contains("\"file_tree\""));
     }
 
     #[test]

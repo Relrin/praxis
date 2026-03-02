@@ -1,9 +1,10 @@
 use indexmap::IndexMap;
 use serde::Serialize;
 
+use crate::budget::BudgetBreakdown;
 use crate::inclusion::{IncludedFile, InclusionMode};
 use crate::types::{Dependency, Symbol, SymbolKind};
-use crate::budget::BudgetBreakdown;
+
 
 const SCHEMA_VERSION: &str = "0.1";
 
@@ -13,6 +14,7 @@ pub struct ContextBundle {
     pub schema_version: &'static str,
     pub task: String,
     pub repo_summary: String,
+    pub file_tree: String,
     pub relevant_files: Vec<RelevantFile>,
     pub symbol_graph: SymbolGraph,
     pub dependency_graph: Vec<DependencyEntry>,
@@ -85,6 +87,7 @@ pub struct TokenBudget {
 pub fn build_context_bundle(
     task: String,
     repo_summary: String,
+    file_tree: String,
     included_files: &[IncludedFile],
     symbols: &[Symbol],
     dependencies: &[Dependency],
@@ -124,6 +127,7 @@ pub fn build_context_bundle(
         schema_version: SCHEMA_VERSION,
         task,
         repo_summary,
+        file_tree,
         relevant_files,
         symbol_graph,
         dependency_graph,
@@ -242,5 +246,6 @@ fn build_token_budget(breakdown: &BudgetBreakdown) -> TokenBudget {
 ///
 /// Returns an error if serialization fails.
 pub fn serialize_json(bundle: &ContextBundle) -> anyhow::Result<String> {
-    serde_json::to_string_pretty(bundle).map_err(|e| anyhow::anyhow!("JSON serialization failed: {e}"))
+    serde_json::to_string_pretty(bundle)
+        .map_err(|e| anyhow::anyhow!("JSON serialization failed: {e}"))
 }
