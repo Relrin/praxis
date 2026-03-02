@@ -7,3 +7,4 @@ pub mod plugin;
 pub mod scanner;
 pub mod scorer;
 pub mod tokenizer;
+pub mod tree;
