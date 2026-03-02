@@ -554,6 +554,8 @@ name = "praxis-lang-rust"
 version = "0.1.0"
 dependencies = [
  "praxis-core",
+ "proc-macro2",
+ "quote",
  "syn",
  "toml",
 ]
