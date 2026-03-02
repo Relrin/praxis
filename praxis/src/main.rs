@@ -1,11 +1,12 @@
 use std::collections::BTreeSet;
+use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 
 use praxis_core::budget::{allocate_budget, BudgetConfig};
-use praxis_core::inclusion::assign_inclusion_modes;
+use praxis_core::inclusion::{assign_inclusion_modes, InclusionMode};
 use praxis_core::markdown::render_markdown;
 use praxis_core::output::{build_context_bundle, serialize_json};
 use praxis_core::plugin::PluginRegistry;
@@ -49,7 +50,7 @@ struct BuildArgs {
     #[arg(long, default_value_t = false)]
     strict: bool,
 
-    /// Output file path.
+    /// Output file path (ignored when --stdout is set).
     #[arg(long, default_value = "context.json")]
     output: PathBuf,
 
@@ -60,6 +61,10 @@ struct BuildArgs {
     /// Maximum file size in bytes to include.
     #[arg(long, default_value_t = 204800)]
     max_file_size: u64,
+
+    /// Write output to stdout instead of a file.
+    #[arg(long, default_value_t = false)]
+    stdout: bool,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -88,8 +93,11 @@ fn run_build(args: BuildArgs) -> Result<()> {
     eprintln!("Scanning repository at {}...", args.repo.display());
     let index = scan_repository(&scan_config, &plugins)
         .context("failed to scan repository")?;
-    eprintln!("  {} files found, {} symbols extracted",
-        index.files.len(), index.symbols.len());
+    eprintln!(
+        "  {} files found, {} symbols extracted",
+        index.files.len(),
+        index.symbols.len()
+    );
 
     let task_tokens: BTreeSet<String> = tokenize_text(&args.task).into_iter().collect();
 
@@ -130,8 +138,10 @@ fn run_build(args: BuildArgs) -> Result<()> {
         .with_buffer_pct(args.buffer_pct);
     let breakdown = allocate_budget(&budget_config, &args.task);
 
-    eprintln!("  Budget: {} effective, {} for code",
-        breakdown.total_effective, breakdown.code);
+    eprintln!(
+        "  Budget: {} effective, {} for code",
+        breakdown.total_effective, breakdown.code
+    );
 
     let included = assign_inclusion_modes(
         &scored_files,
@@ -152,51 +162,117 @@ fn run_build(args: BuildArgs) -> Result<()> {
         &breakdown,
     );
 
-    let json_path = args.output.clone();
-    let md_path = with_extension(&args.output, "md");
+    if args.stdout {
+        write_stdout(&bundle, &args.format)?;
+    } else {
+        write_files(&bundle, &args.output, &args.format)?;
+    }
 
-    match args.format {
+    print_summary(&included, &breakdown, &index.dependencies.len(), &bundle);
+
+    Ok(())
+}
+
+fn write_stdout(
+    bundle: &praxis_core::output::ContextBundle,
+    format: &OutputFormat,
+) -> Result<()> {
+    let out = std::io::stdout();
+    let mut out = out.lock();
+
+    match format {
         OutputFormat::Json => {
-            let json = serialize_json(&bundle)?;
+            let json = serialize_json(bundle)?;
+            out.write_all(json.as_bytes())
+                .context("failed to write to stdout")?;
+            out.write_all(b"\n")
+                .context("failed to write to stdout")?;
+        }
+        OutputFormat::Markdown => {
+            let md = render_markdown(bundle);
+            out.write_all(md.as_bytes())
+                .context("failed to write to stdout")?;
+        }
+        OutputFormat::Both => {
+            let json = serialize_json(bundle)?;
+            out.write_all(json.as_bytes())
+                .context("failed to write to stdout")?;
+            out.write_all(b"\n")
+                .context("failed to write to stdout")?;
+            eprintln!("  Note: --stdout with --format both outputs JSON only. Use --format markdown for Markdown.");
+        }
+    }
+
+    Ok(())
+}
+
+fn write_files(
+    bundle: &praxis_core::output::ContextBundle,
+    output: &PathBuf,
+    format: &OutputFormat,
+) -> Result<()> {
+    let json_path = output.clone();
+    let md_path = with_extension(output, "md");
+
+    match format {
+        OutputFormat::Json => {
+            let json = serialize_json(bundle)?;
             std::fs::write(&json_path, &json)
                 .with_context(|| format!("failed to write {}", json_path.display()))?;
             eprintln!("  Wrote {}", json_path.display());
         }
         OutputFormat::Markdown => {
-            let md = render_markdown(&bundle);
+            let md = render_markdown(bundle);
             std::fs::write(&md_path, &md)
                 .with_context(|| format!("failed to write {}", md_path.display()))?;
             eprintln!("  Wrote {}", md_path.display());
         }
         OutputFormat::Both => {
-            let json = serialize_json(&bundle)?;
+            let json = serialize_json(bundle)?;
             std::fs::write(&json_path, &json)
                 .with_context(|| format!("failed to write {}", json_path.display()))?;
             eprintln!("  Wrote {}", json_path.display());
 
-            let md = render_markdown(&bundle);
+            let md = render_markdown(bundle);
             std::fs::write(&md_path, &md)
                 .with_context(|| format!("failed to write {}", md_path.display()))?;
             eprintln!("  Wrote {}", md_path.display());
         }
     }
 
-    let full_count = included.iter().filter(|f| f.mode == praxis_core::inclusion::InclusionMode::Full).count();
-    let sig_count = included.iter().filter(|f| f.mode == praxis_core::inclusion::InclusionMode::SignatureOnly).count();
-    let sum_count = included.iter().filter(|f| f.mode == praxis_core::inclusion::InclusionMode::SummaryOnly).count();
-    let skip_count = included.iter().filter(|f| f.mode == praxis_core::inclusion::InclusionMode::Skipped).count();
+    Ok(())
+}
 
+fn print_summary(
+    included: &[praxis_core::inclusion::IncludedFile],
+    breakdown: &praxis_core::budget::BudgetBreakdown,
+    dep_count: &usize,
+    bundle: &praxis_core::output::ContextBundle,
+) {
+    let mut full_count = 0;
+    let mut sig_count = 0;
+    let mut sum_count = 0;
+    let mut skip_count = 0;
     let mut total_tokens = 0;
-    for f in &included {
+
+    for f in included {
+        match f.mode {
+            InclusionMode::Full => full_count += 1,
+            InclusionMode::SignatureOnly => sig_count += 1,
+            InclusionMode::SummaryOnly => sum_count += 1,
+            InclusionMode::Skipped => skip_count += 1,
+        }
         total_tokens += f.tokens_used;
     }
 
     eprintln!();
     eprintln!("Summary:");
-    eprintln!("  Files:  {} full, {} signature, {} summary, {} skipped",
-        full_count, sig_count, sum_count, skip_count);
+    eprintln!(
+        "  Files:  {} full, {} signature, {} summary, {} skipped",
+        full_count, sig_count, sum_count, skip_count
+    );
     eprintln!("  Tokens: {} / {} used", total_tokens, breakdown.code);
-    eprintln!("  Deps:   {}", index.dependencies.len());
+    eprintln!("  Deps:   {}", dep_count);
 
     if let Some(warnings) = &bundle.warnings {
         eprintln!();
@@ -204,11 +280,12 @@ fn run_build(args: BuildArgs) -> Result<()> {
             eprintln!("  ⚠ {w}");
         }
     }
-
-    Ok(())
 }
 
-fn build_repo_summary(files: &[praxis_core::types::FileEntry], plugins: &PluginRegistry) -> String {
+fn build_repo_summary(
+    files: &[praxis_core::types::FileEntry],
+    plugins: &PluginRegistry,
+) -> String {
     let mut summaries = Vec::new();
 
     for file in files {
