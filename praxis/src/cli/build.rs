@@ -69,6 +69,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     plugins.register(Box::new(praxis_lang_rust::RustAnalyzer::new()));
     plugins.register(Box::new(praxis_lang_go::GoAnalyzer::new()));
     plugins.register(Box::new(praxis_lang_ts::TypeScriptAnalyzer::new()));
+    plugins.register(Box::new(praxis_lang_python::PythonAnalyzer::new()));
 
     let scan_config = ScanConfig::new(args.repo.clone()).with_max_file_size(args.max_file_size);
 

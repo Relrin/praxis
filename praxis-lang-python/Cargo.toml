@@ -1,0 +1,16 @@
+[package]
+name = "praxis-lang-python"
+edition = "2024"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+tree-sitter = "0.26.6"
+tree-sitter-python = "0.25.0"
+toml = "1.0.6"
+
+regex.workspace = true
+serde_json.workspace = true
+
+praxis-core = { path = "../praxis-core" }
