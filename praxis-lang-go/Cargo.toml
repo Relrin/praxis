@@ -6,6 +6,9 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+tree-sitter = "0.26.6"
+tree-sitter-go = "0.25.0"
+
 regex.workspace = true
 
 praxis-core = { path = "../praxis-core" }
