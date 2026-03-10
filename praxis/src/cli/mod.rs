@@ -1,4 +1,5 @@
 mod build;
+mod summarize;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -13,6 +14,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     Build(build::BuildArgs),
+    Summarize(summarize::SummarizeArgs),
 }
 
 /// Parses CLI arguments and dispatches to the appropriate subcommand.
@@ -21,5 +23,6 @@ pub fn execute() -> Result<()> {
 
     match cli.command {
         Command::Build(args) => build::execute(args),
+        Command::Summarize(args) => summarize::execute(args),
     }
 }

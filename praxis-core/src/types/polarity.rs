@@ -23,6 +23,14 @@ pub const POSITIVE_TRIGGERS: &[&str] = &[
 ];
 
 impl Polarity {
+    /// Returns the polarity as a lowercase string slice.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Positive => "positive",
+            Self::Negative => "negative",
+        }
+    }
+
     /// Given the trigger keyword that classified a line as a constraint,
     /// determine polarity.
     pub fn from_trigger(trigger: &str) -> Self {
@@ -62,6 +70,12 @@ mod tests {
     #[test]
     fn never_case_insensitive() {
         assert_eq!(Polarity::from_trigger("NEVER"), Polarity::Negative);
+    }
+
+    #[test]
+    fn as_str_values() {
+        assert_eq!(Polarity::Positive.as_str(), "positive");
+        assert_eq!(Polarity::Negative.as_str(), "negative");
     }
 
     #[test]

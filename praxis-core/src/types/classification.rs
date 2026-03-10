@@ -24,6 +24,16 @@ impl Classification {
             Self::OpenQuestion => "OPEN QUESTION",
         }
     }
+
+    /// Returns the snake_case string matching serde serialization.
+    /// "constraint", "decision", "open_question"
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Constraint => "constraint",
+            Self::Decision => "decision",
+            Self::OpenQuestion => "open_question",
+        }
+    }
 }
 
 impl std::fmt::Display for Classification {
