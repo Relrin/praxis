@@ -9,3 +9,4 @@ pub mod scorer;
 pub mod tokenizer;
 pub mod tree;
 pub mod util;
+pub mod conversation;

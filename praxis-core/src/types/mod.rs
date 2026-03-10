@@ -14,6 +14,7 @@ mod conversation_memory;
 mod diff_hunk;
 mod changed_file;
 mod symbol_change;
+mod fingerprintable;
 
 pub use symbol_kind::SymbolKind;
 pub use visibility::Visibility;
@@ -31,3 +32,4 @@ pub use conversation_memory::ConversationMemory;
 pub use diff_hunk::DiffHunk;
 pub use changed_file::{ChangeKind, ChangedFile};
 pub use symbol_change::SymbolChange;
+pub use fingerprintable::Fingerprintable;

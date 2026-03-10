@@ -45,6 +45,8 @@ pub fn tokenize_symbol(name: &str) -> Vec<String> {
 /// assert_eq!(tokens, vec!["fix", "http", "parser", "bug"]);
 /// ```
 pub fn tokenize_text(text: &str) -> Vec<String> {
+    use crate::util::stopwords::is_stopword;
+
     let text = text.to_lowercase();
 
     let mut tokens = Vec::new();
@@ -84,14 +86,6 @@ fn split_camel(s: &str) -> Vec<String> {
     tokens
 }
 
-fn is_stopword(token: &str) -> bool {
-    matches!(
-        token,
-        "the" | "a" | "an" | "and" | "or" | "in" | "of" | "to" | "for" | "with" | "on"
-            | "at" | "by" | "from" | "is" | "as" | "be" | "it" | "this" | "that" | "we" | "not"
-            | "use" | "used" | "using"
-    )
-}
 
 #[cfg(test)]
 mod tests {

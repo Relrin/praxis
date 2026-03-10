@@ -10,19 +10,20 @@ pub fn is_word_boundary(c: char) -> bool {
     !c.is_alphanumeric() && c != '_'
 }
 
-/// Search for `needle` as a whole-word match within `haystack`.
+/// Find the position of `needle` as a whole-word match within `haystack`.
 ///
-/// Returns true if `needle` appears in `haystack` and is bounded on both
+/// Returns `Some(position)` if `needle` appears in `haystack` bounded on both
 /// sides by either a word boundary character or the start/end of the string.
+/// Returns `None` if no whole-word match is found.
 ///
 /// Case-sensitive. Caller is responsible for case normalization if needed.
 ///
 /// Note: The boundary check uses `as char` on raw bytes, which is only safe
 /// for ASCII. Since identifiers in supported languages (Rust, Go, TS) are
 /// ASCII-only, this is acceptable for Phase 2.
-pub fn contains_whole_word(haystack: &str, needle: &str) -> bool {
+pub fn find_whole_word(haystack: &str, needle: &str) -> Option<usize> {
     if needle.is_empty() || needle.len() > haystack.len() {
-        return false;
+        return None;
     }
 
     let haystack_bytes = haystack.as_bytes();
@@ -33,20 +34,30 @@ pub fn contains_whole_word(haystack: &str, needle: &str) -> bool {
         let abs_pos = start + pos;
         let end_pos = abs_pos + needle_len;
 
-        let left_ok = abs_pos == 0
-            || is_word_boundary(haystack_bytes[abs_pos - 1] as char);
-        let right_ok = end_pos == haystack.len()
-            || is_word_boundary(haystack_bytes[end_pos] as char);
+        let left_ok =
+            abs_pos == 0 || is_word_boundary(haystack_bytes[abs_pos - 1] as char);
+        let right_ok =
+            end_pos == haystack.len() || is_word_boundary(haystack_bytes[end_pos] as char);
 
         if left_ok && right_ok {
-            return true;
+            return Some(abs_pos);
         }
 
         // Advance past this occurrence
         start = abs_pos + 1;
     }
 
-    false
+    None
+}
+
+/// Search for `needle` as a whole-word match within `haystack`.
+///
+/// Returns true if `needle` appears in `haystack` and is bounded on both
+/// sides by either a word boundary character or the start/end of the string.
+///
+/// Case-sensitive. Caller is responsible for case normalization if needed.
+pub fn contains_whole_word(haystack: &str, needle: &str) -> bool {
+    find_whole_word(haystack, needle).is_some()
 }
 
 #[cfg(test)]
