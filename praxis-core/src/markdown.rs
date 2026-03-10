@@ -58,7 +58,7 @@ fn render_token_budget(out: &mut String, bundle: &ContextBundle) {
     out.push_str(&format!("| Code | {} |\n", tb.code));
     out.push_str(&format!("| Strict Mode | {} |\n", tb.strict_mode));
     out.push_str(&format!("| Overflow | {} |\n", tb.overflow));
-    out.push_str("\n");
+    out.push('\n');
 }
 
 fn render_relevant_files(out: &mut String, bundle: &ContextBundle) {

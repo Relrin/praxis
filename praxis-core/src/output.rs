@@ -186,6 +186,7 @@ fn build_symbol_graph(symbols: &[Symbol]) -> SymbolGraph {
             SymbolKind::Module => "modules",
             SymbolKind::Method => "methods",
             SymbolKind::Constant => "constants",
+            SymbolKind::TypeAlias | SymbolKind::Other => continue,
         };
 
         groups.get_mut(bucket).unwrap().push(entry);

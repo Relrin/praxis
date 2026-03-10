@@ -6,6 +6,12 @@ use praxis_core::types::{Dependency, FileEntry, Symbol, SymbolKind, Visibility};
 
 pub struct RustAnalyzer;
 
+impl Default for RustAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RustAnalyzer {
     pub fn new() -> Self {
         Self

@@ -40,6 +40,12 @@ pub struct GoAnalyzer {
     require_entry_re: Regex,
 }
 
+impl Default for GoAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GoAnalyzer {
     pub fn new() -> Self {
         Self {

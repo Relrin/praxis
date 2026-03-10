@@ -29,6 +29,12 @@ pub struct PluginRegistry {
     plugins: Vec<Box<dyn LanguageAnalyzer>>,
 }
 
+impl Default for PluginRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PluginRegistry {
     /// Creates an empty [`PluginRegistry`].
     pub fn new() -> Self {

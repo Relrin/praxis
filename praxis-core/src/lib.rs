@@ -8,3 +8,4 @@ pub mod scanner;
 pub mod scorer;
 pub mod tokenizer;
 pub mod tree;
+pub mod util;

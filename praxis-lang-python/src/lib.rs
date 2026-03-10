@@ -24,6 +24,12 @@ const PYTHON_SYMBOLS_QUERY: &str = r#"
 
 pub struct PythonAnalyzer;
 
+impl Default for PythonAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PythonAnalyzer {
     pub fn new() -> Self {
         Self

@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
@@ -204,8 +204,8 @@ fn write_stdout(bundle: &ContextBundle, format: &OutputFormat) -> Result<()> {
     Ok(())
 }
 
-fn write_files(bundle: &ContextBundle, output: &PathBuf, format: &OutputFormat) -> Result<()> {
-    let json_path = output.clone();
+fn write_files(bundle: &ContextBundle, output: &Path, format: &OutputFormat) -> Result<()> {
+    let json_path = output.to_path_buf();
     let md_path = with_extension(output, "md");
 
     match format {
@@ -311,8 +311,8 @@ fn build_repo_summary(files: &[FileEntry], plugins: &PluginRegistry) -> String {
     }
 }
 
-fn with_extension(path: &PathBuf, ext: &str) -> PathBuf {
-    let mut new_path = path.clone();
+fn with_extension(path: &Path, ext: &str) -> PathBuf {
+    let mut new_path = path.to_path_buf();
     new_path.set_extension(ext);
     new_path
 }

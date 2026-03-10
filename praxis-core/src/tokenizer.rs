@@ -85,12 +85,12 @@ fn split_camel(s: &str) -> Vec<String> {
 }
 
 fn is_stopword(token: &str) -> bool {
-    match token {
+    matches!(
+        token,
         "the" | "a" | "an" | "and" | "or" | "in" | "of" | "to" | "for" | "with" | "on"
-        | "at" | "by" | "from" | "is" | "as" | "be" | "it" | "this" | "that" | "we" | "not"
-        | "use" | "used" | "using" => true,
-        _ => false,
-    }
+            | "at" | "by" | "from" | "is" | "as" | "be" | "it" | "this" | "that" | "we" | "not"
+            | "use" | "used" | "using"
+    )
 }
 
 #[cfg(test)]

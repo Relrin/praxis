@@ -81,6 +81,12 @@ const JS_SYMBOLS_QUERY: &str = r#"
 
 pub struct TypeScriptAnalyzer;
 
+impl Default for TypeScriptAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TypeScriptAnalyzer {
     pub fn new() -> Self {
         Self
@@ -294,6 +300,7 @@ impl LanguageAnalyzer for TypeScriptAnalyzer {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_symbol(
     m: &tree_sitter::QueryMatch,
     query: &Query,
