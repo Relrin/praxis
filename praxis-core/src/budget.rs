@@ -31,17 +31,26 @@ impl BudgetConfig {
     }
 }
 
-/// Breakdown of how the token budget is allocated across buckets.
-#[derive(Debug, Clone)]
-pub struct BudgetBreakdown {
-    pub total_declared: usize,
-    pub total_effective: usize,
+/// Token budget breakdown used across all bundle types.
+///
+/// For context bundles, all bucket fields are populated.
+/// For diff bundles, bucket fields default to 0.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TokenBudget {
+    pub declared: usize,
+    pub effective: usize,
+    #[serde(default)]
     pub task: usize,
+    #[serde(default)]
     pub repo_summary: usize,
+    #[serde(default)]
     pub memory: usize,
+    #[serde(default)]
     pub safety: usize,
+    #[serde(default)]
     pub code: usize,
     pub strict: bool,
+    #[serde(default)]
     pub overflow: bool,
 }
 
@@ -56,19 +65,19 @@ pub struct BudgetBreakdown {
 ///
 /// If reserves exceed the effective budget, `code` is set to 0 and
 /// `overflow` is flagged. A zero-code bundle is valid output.
-pub fn allocate_budget(config: &BudgetConfig, task_text: &str) -> BudgetBreakdown {
-    let total_declared = config.total_budget;
+pub fn allocate_budget(config: &BudgetConfig, task_text: &str) -> TokenBudget {
+    let declared = config.total_budget;
 
-    let total_effective = if config.strict {
-        total_declared
+    let effective = if config.strict {
+        declared
     } else {
-        (total_declared as f64 * (1.0 + config.buffer_pct)) as usize
+        (declared as f64 * (1.0 + config.buffer_pct)) as usize
     };
 
     let task = task_text.len() / 4;
 
     let repo_summary_min = 300;
-    let repo_summary_pct = (total_effective as f64 * 0.05) as usize;
+    let repo_summary_pct = (effective as f64 * 0.05) as usize;
     let repo_summary = if repo_summary_min > repo_summary_pct {
         repo_summary_min
     } else {
@@ -77,8 +86,8 @@ pub fn allocate_budget(config: &BudgetConfig, task_text: &str) -> BudgetBreakdow
 
     let used_after_summary = task + repo_summary;
 
-    let remaining_for_memory = total_effective.saturating_sub(used_after_summary);
-    let memory_pct = (total_effective as f64 * 0.20) as usize;
+    let remaining_for_memory = effective.saturating_sub(used_after_summary);
+    let memory_pct = (effective as f64 * 0.20) as usize;
     let memory = if memory_pct < remaining_for_memory {
         memory_pct
     } else {
@@ -90,17 +99,17 @@ pub fn allocate_budget(config: &BudgetConfig, task_text: &str) -> BudgetBreakdow
     let safety = if config.strict {
         0
     } else {
-        (total_effective as f64 * 0.05) as usize
+        (effective as f64 * 0.05) as usize
     };
 
     let used_after_safety = used_after_memory + safety;
 
-    let code = total_effective.saturating_sub(used_after_safety);
-    let overflow = used_after_safety >= total_effective;
+    let code = effective.saturating_sub(used_after_safety);
+    let overflow = used_after_safety >= effective;
 
-    BudgetBreakdown {
-        total_declared,
-        total_effective,
+    TokenBudget {
+        declared,
+        effective,
         task,
         repo_summary,
         memory,
@@ -120,8 +129,8 @@ mod tests {
         let config = BudgetConfig::new(8000);
         let breakdown = allocate_budget(&config, "fix the parser");
 
-        assert_eq!(breakdown.total_declared, 8000);
-        assert_eq!(breakdown.total_effective, 8800);
+        assert_eq!(breakdown.declared, 8000);
+        assert_eq!(breakdown.effective, 8800);
         assert!(!breakdown.strict);
     }
 
@@ -130,8 +139,8 @@ mod tests {
         let config = BudgetConfig::new(8000).with_strict(true);
         let breakdown = allocate_budget(&config, "fix the parser");
 
-        assert_eq!(breakdown.total_declared, 8000);
-        assert_eq!(breakdown.total_effective, 8000);
+        assert_eq!(breakdown.declared, 8000);
+        assert_eq!(breakdown.effective, 8000);
         assert!(breakdown.strict);
         assert_eq!(breakdown.safety, 0);
     }
@@ -158,7 +167,7 @@ mod tests {
         let config = BudgetConfig::new(100_000);
         let breakdown = allocate_budget(&config, "task");
 
-        let expected_pct = (breakdown.total_effective as f64 * 0.05) as usize;
+        let expected_pct = (breakdown.effective as f64 * 0.05) as usize;
         assert_eq!(breakdown.repo_summary, expected_pct);
     }
 
@@ -168,7 +177,7 @@ mod tests {
         let breakdown = allocate_budget(&config, "fix");
 
         let reserved = breakdown.task + breakdown.repo_summary + breakdown.memory + breakdown.safety;
-        assert_eq!(breakdown.code, breakdown.total_effective - reserved);
+        assert_eq!(breakdown.code, breakdown.effective - reserved);
     }
 
     #[test]
@@ -200,7 +209,7 @@ mod tests {
             + breakdown.memory
             + breakdown.safety
             + breakdown.code;
-        assert_eq!(total, breakdown.total_effective);
+        assert_eq!(total, breakdown.effective);
     }
 
     #[test]
@@ -208,6 +217,6 @@ mod tests {
         let config = BudgetConfig::new(10_000).with_buffer_pct(0.25);
         let breakdown = allocate_budget(&config, "task");
 
-        assert_eq!(breakdown.total_effective, 12_500);
+        assert_eq!(breakdown.effective, 12_500);
     }
 }

@@ -1,3 +1,4 @@
+use crate::inclusion::InclusionMode;
 use crate::output::ContextBundle;
 
 /// Format a ContextBundle as a human-readable audit string.
@@ -30,9 +31,9 @@ pub fn format_context_bundle(bundle: &ContextBundle, verbose: bool) -> String {
 
     // --- Files ---
     out.push_str("Files\n");
-    let full_count = count_inclusion_mode(&bundle.relevant_files, "full");
-    let sig_count = count_inclusion_mode(&bundle.relevant_files, "signature_only");
-    let summary_count = count_inclusion_mode(&bundle.relevant_files, "summary_only");
+    let full_count = count_inclusion_mode(&bundle.relevant_files, InclusionMode::Full);
+    let sig_count = count_inclusion_mode(&bundle.relevant_files, InclusionMode::SignatureOnly);
+    let summary_count = count_inclusion_mode(&bundle.relevant_files, InclusionMode::SummaryOnly);
     let included = full_count + sig_count + summary_count;
     let skipped = bundle.relevant_files.len() - included;
 
@@ -114,7 +115,7 @@ pub fn format_context_bundle(bundle: &ContextBundle, verbose: bool) -> String {
         out.push_str(&format!("Skipped files ({})\n", skipped));
         for file in sorted_files
             .iter()
-            .filter(|f| f.inclusion_mode == "skipped")
+            .filter(|f| f.inclusion_mode == InclusionMode::Skipped)
         {
             out.push_str(&format!("  {:.4}  {}\n", file.relevance_score, file.path));
         }
@@ -126,7 +127,7 @@ pub fn format_context_bundle(bundle: &ContextBundle, verbose: bool) -> String {
 
 fn count_inclusion_mode(
     files: &[crate::output::RelevantFile],
-    mode: &str,
+    mode: InclusionMode,
 ) -> usize {
     files.iter().filter(|f| f.inclusion_mode == mode).count()
 }
@@ -145,7 +146,7 @@ mod tests {
             relevant_files: vec![
                 RelevantFile {
                     path: "src/main.rs".to_string(),
-                    inclusion_mode: "full".to_string(),
+                    inclusion_mode: InclusionMode::Full,
                     content: Some("fn main() {}".to_string()),
                     signatures: None,
                     summary: None,
@@ -154,7 +155,7 @@ mod tests {
                 },
                 RelevantFile {
                     path: "src/lib.rs".to_string(),
-                    inclusion_mode: "skipped".to_string(),
+                    inclusion_mode: InclusionMode::Skipped,
                     content: None,
                     signatures: None,
                     summary: None,

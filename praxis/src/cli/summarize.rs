@@ -83,6 +83,10 @@ pub fn execute(args: SummarizeArgs) -> Result<()> {
     }
 
     // 5. Render
+    if matches!(args.format, OutputFormat::Both) {
+        anyhow::bail!("--format both is not supported for summarize. Use json or markdown.");
+    }
+
     let output = match (args.mode, args.format) {
         (SummarizeMode::Flat, OutputFormat::Json) => render_flat_json(&memory)?,
         (SummarizeMode::Flat, OutputFormat::Markdown) => render_flat_md(&memory),
@@ -90,6 +94,7 @@ pub fn execute(args: SummarizeArgs) -> Result<()> {
         (SummarizeMode::Hierarchical, OutputFormat::Markdown) => render_hierarchical_md(&memory),
         (SummarizeMode::DecisionFocused, OutputFormat::Json) => render_decision_json(&memory)?,
         (SummarizeMode::DecisionFocused, OutputFormat::Markdown) => render_decision_md(&memory),
+        (_, OutputFormat::Both) => unreachable!(),
     };
 
     // 6. Write output

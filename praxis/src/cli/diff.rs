@@ -5,15 +5,15 @@ use clap::Parser;
 use indexmap::IndexMap;
 
 use praxis_core::conversation::{extract, ExtractionConfig};
+use praxis_core::budget::TokenBudget;
 use praxis_core::diff::{
     compute_impact_radius, cross_reference, diff_symbols, diff_trees, extract_symbols_from_tree,
     render_diff_json, render_diff_md, score_changed_file, DiffBundle, DiffStats,
-    ImpactRadiusOutput, TokenBudget,
+    ImpactRadiusOutput,
 };
-use praxis_core::plugin::PluginRegistry;
 use praxis_core::types::{ChangeKind, SymbolChange, SymbolChangeKind};
 
-use super::common::OutputFormat;
+use super::common::{default_plugin_registry, OutputFormat};
 
 #[derive(Parser)]
 pub struct DiffArgs {
@@ -61,11 +61,7 @@ pub fn execute(args: DiffArgs) -> Result<()> {
     })?;
 
     // 2. Build plugin registry
-    let mut plugins = PluginRegistry::new();
-    plugins.register(Box::new(praxis_lang_rust::RustAnalyzer::new()));
-    plugins.register(Box::new(praxis_lang_go::GoAnalyzer::new()));
-    plugins.register(Box::new(praxis_lang_ts::TypeScriptAnalyzer::new()));
-    plugins.register(Box::new(praxis_lang_python::PythonAnalyzer::new()));
+    let plugins = default_plugin_registry();
 
     // 3. Compute tree diff
     eprintln!("Computing diff {} -> {}...", args.from, args.to);
@@ -221,6 +217,12 @@ pub fn execute(args: DiffArgs) -> Result<()> {
             declared: budget,
             effective,
             strict: args.strict,
+            task: 0,
+            repo_summary: 0,
+            memory: 0,
+            safety: 0,
+            code: 0,
+            overflow: false,
         })
     } else {
         None
@@ -245,23 +247,35 @@ pub fn execute(args: DiffArgs) -> Result<()> {
     };
 
     // 13. Render and write output
-    let output = match args.format {
-        OutputFormat::Json => render_diff_json(&bundle)?,
-        OutputFormat::Markdown => render_diff_md(&bundle),
-    };
-
-    let output_path = match args.format {
-        OutputFormat::Json => args.output,
-        OutputFormat::Markdown => {
-            let mut p = args.output;
-            p.set_extension("md");
-            p
+    match args.format {
+        OutputFormat::Json => {
+            let output = render_diff_json(&bundle)?;
+            std::fs::write(&args.output, &output)
+                .with_context(|| format!("Failed to write output: {}", args.output.display()))?;
+            eprintln!("Wrote {}", args.output.display());
         }
-    };
+        OutputFormat::Markdown => {
+            let output = render_diff_md(&bundle);
+            let mut md_path = args.output;
+            md_path.set_extension("md");
+            std::fs::write(&md_path, &output)
+                .with_context(|| format!("Failed to write output: {}", md_path.display()))?;
+            eprintln!("Wrote {}", md_path.display());
+        }
+        OutputFormat::Both => {
+            let json = render_diff_json(&bundle)?;
+            std::fs::write(&args.output, &json)
+                .with_context(|| format!("Failed to write output: {}", args.output.display()))?;
+            eprintln!("Wrote {}", args.output.display());
 
-    std::fs::write(&output_path, &output)
-        .with_context(|| format!("Failed to write output: {}", output_path.display()))?;
-    eprintln!("Wrote {}", output_path.display());
+            let md = render_diff_md(&bundle);
+            let mut md_path = args.output;
+            md_path.set_extension("md");
+            std::fs::write(&md_path, &md)
+                .with_context(|| format!("Failed to write output: {}", md_path.display()))?;
+            eprintln!("Wrote {}", md_path.display());
+        }
+    }
 
     Ok(())
 }

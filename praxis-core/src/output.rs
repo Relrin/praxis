@@ -1,7 +1,8 @@
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
-use crate::budget::BudgetBreakdown;
+// Re-exported so consumers of `output::*` get TokenBudget alongside ContextBundle.
+pub use crate::budget::TokenBudget;
 use crate::inclusion::{IncludedFile, InclusionMode};
 use crate::types::{ConversationMemory, Dependency, Symbol, SymbolKind};
 
@@ -29,7 +30,7 @@ pub struct ContextBundle {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelevantFile {
     pub path: String,
-    pub inclusion_mode: String,
+    pub inclusion_mode: InclusionMode,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -71,20 +72,6 @@ pub struct DependencyEntry {
     pub features: Vec<String>,
 }
 
-/// Token budget breakdown in the output.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TokenBudget {
-    pub declared: usize,
-    pub effective: usize,
-    pub task: usize,
-    pub repo_summary: usize,
-    pub memory: usize,
-    pub safety: usize,
-    pub code: usize,
-    pub strict: bool,
-    pub overflow: bool,
-}
-
 /// Builds a [`ContextBundle`] from all processed components.
 pub fn build_context_bundle(
     task: String,
@@ -93,15 +80,14 @@ pub fn build_context_bundle(
     included_files: &[IncludedFile],
     symbols: &[Symbol],
     dependencies: &[Dependency],
-    breakdown: &BudgetBreakdown,
+    budget: &TokenBudget,
 ) -> ContextBundle {
     let relevant_files = build_relevant_files(included_files);
     let symbol_graph = build_symbol_graph(symbols);
     let dependency_graph = build_dependency_graph(dependencies);
-    let token_budget = build_token_budget(breakdown);
 
     let mut warnings = Vec::new();
-    if breakdown.overflow {
+    if budget.overflow {
         warnings.push(
             "Token budget overflow: reserves exceed effective budget. \
              Code budget is 0. Raise --token-budget to include file content."
@@ -133,7 +119,7 @@ pub fn build_context_bundle(
         relevant_files,
         symbol_graph,
         dependency_graph,
-        token_budget,
+        token_budget: budget.clone(),
         conversation_memory: None,
         warnings,
     }
@@ -144,7 +130,7 @@ fn build_relevant_files(included_files: &[IncludedFile]) -> Vec<RelevantFile> {
     for file in included_files {
         result.push(RelevantFile {
             path: file.path.clone(),
-            inclusion_mode: file.mode.as_str().to_string(),
+            inclusion_mode: file.mode,
             content: file.content.clone(),
             signatures: file.signatures.clone(),
             summary: file.summary.clone(),
@@ -228,20 +214,6 @@ fn build_dependency_graph(dependencies: &[Dependency]) -> Vec<DependencyEntry> {
         });
     }
     result
-}
-
-fn build_token_budget(breakdown: &BudgetBreakdown) -> TokenBudget {
-    TokenBudget {
-        declared: breakdown.total_declared,
-        effective: breakdown.total_effective,
-        task: breakdown.task,
-        repo_summary: breakdown.repo_summary,
-        memory: breakdown.memory,
-        safety: breakdown.safety,
-        code: breakdown.code,
-        strict: breakdown.strict,
-        overflow: breakdown.overflow,
-    }
 }
 
 /// Serializes a [`ContextBundle`] to a pretty-printed JSON string.

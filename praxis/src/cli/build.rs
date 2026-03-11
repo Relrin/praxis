@@ -3,9 +3,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 
-use praxis_core::budget::{allocate_budget, BudgetConfig};
+use praxis_core::budget::{allocate_budget, BudgetConfig, TokenBudget};
 use praxis_core::inclusion::{assign_inclusion_modes, IncludedFile, InclusionMode};
 use praxis_core::markdown::render_markdown;
 use praxis_core::output::{build_context_bundle, serialize_json, ContextBundle};
@@ -17,6 +17,7 @@ use praxis_core::tree::render_file_tree;
 use praxis_core::types::FileEntry;
 use praxis_core::util::path::to_posix_path;
 
+use super::common::{default_plugin_registry, OutputFormat};
 
 #[derive(Parser)]
 pub struct BuildArgs {
@@ -57,19 +58,8 @@ pub struct BuildArgs {
     stdout: bool,
 }
 
-#[derive(Clone, ValueEnum)]
-enum OutputFormat {
-    Json,
-    Markdown,
-    Both,
-}
-
 pub fn execute(args: BuildArgs) -> Result<()> {
-    let mut plugins = PluginRegistry::new();
-    plugins.register(Box::new(praxis_lang_rust::RustAnalyzer::new()));
-    plugins.register(Box::new(praxis_lang_go::GoAnalyzer::new()));
-    plugins.register(Box::new(praxis_lang_ts::TypeScriptAnalyzer::new()));
-    plugins.register(Box::new(praxis_lang_python::PythonAnalyzer::new()));
+    let plugins = default_plugin_registry();
 
     let scan_config = ScanConfig::new(args.repo.clone()).with_max_file_size(args.max_file_size);
 
@@ -119,11 +109,11 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     let budget_config = BudgetConfig::new(args.token_budget)
         .with_strict(args.strict)
         .with_buffer_pct(args.buffer_pct);
-    let breakdown = allocate_budget(&budget_config, &args.task);
+    let budget = allocate_budget(&budget_config, &args.task);
 
     eprintln!(
         "  Budget: {} effective, {} for code",
-        breakdown.total_effective, breakdown.code
+        budget.effective, budget.code
     );
 
     let included = assign_inclusion_modes(
@@ -131,7 +121,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         &index.files,
         &index.symbols,
         &plugins,
-        breakdown.code,
+        budget.code,
     );
 
     let repo_summary = build_repo_summary(&index.files, &plugins);
@@ -157,7 +147,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         &included,
         &index.symbols,
         &index.dependencies,
-        &breakdown,
+        &budget,
     );
 
     if args.stdout {
@@ -166,7 +156,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         write_files(&bundle, &args.output, &args.format)?;
     }
 
-    print_summary(&included, &breakdown, index.dependencies.len(), &bundle);
+    print_summary(&included, &budget, index.dependencies.len(), &bundle);
 
     Ok(())
 }
@@ -239,7 +229,7 @@ fn write_files(bundle: &ContextBundle, output: &Path, format: &OutputFormat) -> 
 
 fn print_summary(
     included: &[IncludedFile],
-    breakdown: &praxis_core::budget::BudgetBreakdown,
+    budget: &TokenBudget,
     dep_count: usize,
     bundle: &ContextBundle,
 ) {
@@ -265,7 +255,7 @@ fn print_summary(
         "  Files:  {} full, {} signature, {} summary, {} skipped",
         full_count, sig_count, sum_count, skip_count
     );
-    eprintln!("  Tokens: {} / {} used", total_tokens, breakdown.code);
+    eprintln!("  Tokens: {} / {} used", total_tokens, budget.code);
     eprintln!("  Deps:   {}", dep_count);
 
     if let Some(warnings) = &bundle.warnings {

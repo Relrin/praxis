@@ -1,9 +1,124 @@
+use std::fmt;
+
+use serde::{Deserialize, Serialize};
+
 use crate::plugin::PluginRegistry;
 use crate::scorer::ScoredFile;
 use crate::types::{FileEntry, Symbol};
 
+// ---------------------------------------------------------------------------
+// Generic budget allocation trait + function
+// ---------------------------------------------------------------------------
+
+/// Abstraction over a file that can be included in a budget-constrained context.
+///
+/// Both the *build* path (working with raw `FileEntry` + symbols) and the
+/// *prune* path (working with an existing `RelevantFile`) implement this trait
+/// so that a single [`greedy_allocate`] function handles both.
+pub trait BudgetCandidate {
+    /// A human-readable identifier (typically the file path).
+    fn identifier(&self) -> &str;
+
+    /// Relevance score used only for ordering/reporting — not for allocation.
+    fn score(&self) -> f64;
+
+    /// Token cost if the file is included in full.
+    fn full_tokens(&self) -> usize;
+
+    /// The full file content to embed when mode is [`InclusionMode::Full`].
+    fn full_content(&self) -> Option<String>;
+
+    /// Compute signature-only representation.
+    /// Returns `(token_cost, signatures)` or `None` if unavailable.
+    fn compute_signatures(&self) -> Option<(usize, Vec<String>)>;
+
+    /// Compute a summary truncated to fit within `max_tokens`.
+    /// Returns `(token_cost, summary_text)` or `None` if unavailable.
+    fn compute_summary(&self, max_tokens: usize) -> Option<(usize, String)>;
+}
+
+/// Result of allocating a single candidate within the budget.
+#[derive(Debug, Clone)]
+pub struct AllocationResult {
+    pub mode: InclusionMode,
+    pub tokens_used: usize,
+    pub content: Option<String>,
+    pub signatures: Option<Vec<String>>,
+    pub summary: Option<String>,
+}
+
+/// Greedy budget allocation over an ordered list of candidates.
+///
+/// Iterates candidates in order (caller is responsible for sorting by score).
+/// For each candidate, tries full → signature-only → summary-only → skipped.
+pub fn greedy_allocate<C: BudgetCandidate>(
+    candidates: &[C],
+    budget: usize,
+) -> Vec<AllocationResult> {
+    let mut remaining = budget;
+    let mut results = Vec::with_capacity(candidates.len());
+
+    for candidate in candidates {
+        // Try full inclusion
+        let full_cost = candidate.full_tokens();
+        if full_cost <= remaining {
+            if let Some(content) = candidate.full_content() {
+                remaining -= full_cost;
+                results.push(AllocationResult {
+                    mode: InclusionMode::Full,
+                    tokens_used: full_cost,
+                    content: Some(content),
+                    signatures: None,
+                    summary: None,
+                });
+                continue;
+            }
+        }
+
+        // Try signature-only
+        if let Some((sig_cost, sigs)) = candidate.compute_signatures() {
+            if sig_cost > 0 && sig_cost <= remaining {
+                remaining -= sig_cost;
+                results.push(AllocationResult {
+                    mode: InclusionMode::SignatureOnly,
+                    tokens_used: sig_cost,
+                    content: None,
+                    signatures: Some(sigs),
+                    summary: None,
+                });
+                continue;
+            }
+        }
+
+        // Try summary-only
+        if let Some((sum_cost, summary)) = candidate.compute_summary(remaining) {
+            remaining -= sum_cost;
+            results.push(AllocationResult {
+                mode: InclusionMode::SummaryOnly,
+                tokens_used: sum_cost,
+                content: None,
+                signatures: None,
+                summary: Some(summary),
+            });
+            continue;
+        }
+
+        // Skipped
+        results.push(AllocationResult {
+            mode: InclusionMode::Skipped,
+            tokens_used: 0,
+            content: None,
+            signatures: None,
+            summary: None,
+        });
+    }
+
+    results
+}
+
 /// Determines how a file is included in the context bundle.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum InclusionMode {
     Full,
     SignatureOnly,
@@ -11,15 +126,15 @@ pub enum InclusionMode {
     Skipped,
 }
 
-impl InclusionMode {
-    /// Returns the serialization label for output.
-    pub fn as_str(&self) -> &'static str {
-        match self {
+impl fmt::Display for InclusionMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
             InclusionMode::Full => "full",
             InclusionMode::SignatureOnly => "signature_only",
             InclusionMode::SummaryOnly => "summary_only",
             InclusionMode::Skipped => "skipped",
-        }
+        };
+        f.write_str(s)
     }
 }
 
@@ -37,7 +152,7 @@ pub struct IncludedFile {
 }
 
 /// Estimates the token cost of including all signatures for a file.
-fn signature_tokens(file: &FileEntry, symbols: &[Symbol]) -> (usize, Vec<String>) {
+fn signature_tokens(file: &FileEntry, symbols: &[&Symbol]) -> (usize, Vec<String>) {
     let mut sigs = Vec::new();
     for sym in symbols {
         if sym.file == file.path {
@@ -115,6 +230,51 @@ fn truncate_to_char_boundary(s: &str, max_len: usize) -> &str {
     &s[..end]
 }
 
+// ---------------------------------------------------------------------------
+// Build-path candidate (wraps ScoredFile + FileEntry + symbols + plugins)
+// ---------------------------------------------------------------------------
+
+/// A candidate for the build path, wrapping references to the raw data.
+struct BuildCandidate<'a> {
+    scored: &'a ScoredFile,
+    file: &'a FileEntry,
+    file_symbols: Vec<&'a Symbol>,
+    plugins: &'a PluginRegistry,
+}
+
+impl<'a> BudgetCandidate for BuildCandidate<'a> {
+    fn identifier(&self) -> &str {
+        &self.scored.path
+    }
+
+    fn score(&self) -> f64 {
+        self.scored.score
+    }
+
+    fn full_tokens(&self) -> usize {
+        self.file.estimated_tokens
+    }
+
+    fn full_content(&self) -> Option<String> {
+        Some(self.file.content.clone())
+    }
+
+    fn compute_signatures(&self) -> Option<(usize, Vec<String>)> {
+        let (cost, sigs) = signature_tokens(self.file, &self.file_symbols);
+        if cost > 0 {
+            Some((cost, sigs))
+        } else {
+            None
+        }
+    }
+
+    fn compute_summary(&self, max_tokens: usize) -> Option<(usize, String)> {
+        let summary = build_summary(self.file, self.plugins, max_tokens)?;
+        let cost = summary.len() / 4;
+        Some((cost, summary))
+    }
+}
+
 /// Assigns an [`InclusionMode`] to each scored file using greedy budget allocation.
 ///
 /// Iterates files in score order (highest first). For each file, tries to fit
@@ -127,72 +287,42 @@ pub fn assign_inclusion_modes(
     plugins: &PluginRegistry,
     code_budget: usize,
 ) -> Vec<IncludedFile> {
-    let mut remaining = code_budget;
-    let mut result = Vec::new();
+    // Build candidates
+    let candidates: Vec<BuildCandidate> = scored_files
+        .iter()
+        .map(|scored| {
+            let file = &files[scored.file_index];
+            let file_symbols: Vec<&Symbol> = symbols
+                .iter()
+                .filter(|s| s.file == file.path)
+                .collect();
+            BuildCandidate {
+                scored,
+                file,
+                file_symbols,
+                plugins,
+            }
+        })
+        .collect();
 
-    for scored in scored_files {
-        let file = &files[scored.file_index];
+    // Run generic allocation
+    let alloc_results = greedy_allocate(&candidates, code_budget);
 
-        if file.estimated_tokens <= remaining {
-            remaining -= file.estimated_tokens;
-            result.push(IncludedFile {
-                file_index: scored.file_index,
-                path: scored.path.clone(),
-                score: scored.score,
-                mode: InclusionMode::Full,
-                tokens_used: file.estimated_tokens,
-                content: Some(file.content.clone()),
-                signatures: None,
-                summary: None,
-            });
-            continue;
-        }
-
-        let (sig_cost, sigs) = signature_tokens(file, symbols);
-        if sig_cost > 0 && sig_cost <= remaining {
-            remaining -= sig_cost;
-            result.push(IncludedFile {
-                file_index: scored.file_index,
-                path: scored.path.clone(),
-                score: scored.score,
-                mode: InclusionMode::SignatureOnly,
-                tokens_used: sig_cost,
-                content: None,
-                signatures: Some(sigs),
-                summary: None,
-            });
-            continue;
-        }
-
-        if let Some(summary) = build_summary(file, plugins, remaining) {
-            let cost = summary.len() / 4;
-            remaining -= cost;
-            result.push(IncludedFile {
-                file_index: scored.file_index,
-                path: scored.path.clone(),
-                score: scored.score,
-                mode: InclusionMode::SummaryOnly,
-                tokens_used: cost,
-                content: None,
-                signatures: None,
-                summary: Some(summary),
-            });
-            continue;
-        }
-
-        result.push(IncludedFile {
+    // Map back to IncludedFile
+    scored_files
+        .iter()
+        .zip(alloc_results)
+        .map(|(scored, alloc)| IncludedFile {
             file_index: scored.file_index,
             path: scored.path.clone(),
             score: scored.score,
-            mode: InclusionMode::Skipped,
-            tokens_used: 0,
-            content: None,
-            signatures: None,
-            summary: None,
-        });
-    }
-
-    result
+            mode: alloc.mode,
+            tokens_used: alloc.tokens_used,
+            content: alloc.content,
+            signatures: alloc.signatures,
+            summary: alloc.summary,
+        })
+        .collect()
 }
 
 #[cfg(test)]

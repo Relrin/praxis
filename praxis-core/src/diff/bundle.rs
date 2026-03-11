@@ -1,6 +1,7 @@
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
+use crate::budget::TokenBudget;
 use crate::types::{ChangedFile, ChangeKind, SymbolChange, SymbolChangeKind};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,13 +34,6 @@ pub struct DiffStats {
     pub symbols_signature_changed: usize,
     pub total_lines_added: usize,
     pub total_lines_removed: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TokenBudget {
-    pub declared: usize,
-    pub effective: usize,
-    pub strict: bool,
 }
 
 impl DiffStats {

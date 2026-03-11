@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use crate::diff::DiffBundle;
+use crate::inclusion::InclusionMode;
 use crate::output::ContextBundle;
 use crate::types::{ChangeKind, SymbolChangeKind};
 
@@ -26,7 +27,7 @@ pub fn validate_context_bundle(bundle: &ContextBundle) -> Vec<String> {
     let scores: Vec<f64> = bundle
         .relevant_files
         .iter()
-        .filter(|f| f.inclusion_mode != "skipped")
+        .filter(|f| f.inclusion_mode != InclusionMode::Skipped)
         .map(|f| f.relevance_score)
         .collect();
 
@@ -219,7 +220,7 @@ mod tests {
         bundle.relevant_files = vec![
             RelevantFile {
                 path: "a.rs".to_string(),
-                inclusion_mode: "full".to_string(),
+                inclusion_mode: InclusionMode::Full,
                 content: None,
                 signatures: None,
                 summary: None,
@@ -228,7 +229,7 @@ mod tests {
             },
             RelevantFile {
                 path: "b.rs".to_string(),
-                inclusion_mode: "full".to_string(),
+                inclusion_mode: InclusionMode::Full,
                 content: None,
                 signatures: None,
                 summary: None,

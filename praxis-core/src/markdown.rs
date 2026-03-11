@@ -160,6 +160,7 @@ fn render_dependencies(out: &mut String, bundle: &ContextBundle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::inclusion::InclusionMode;
     use crate::output::*;
 
     fn minimal_bundle() -> ContextBundle {
@@ -171,7 +172,7 @@ mod tests {
             relevant_files: vec![
                 RelevantFile {
                     path: "src/main.rs".to_string(),
-                    inclusion_mode: "full".to_string(),
+                    inclusion_mode: InclusionMode::Full,
                     content: Some("fn main() {}".to_string()),
                     signatures: None,
                     summary: None,
@@ -180,7 +181,7 @@ mod tests {
                 },
                 RelevantFile {
                     path: "src/lib.rs".to_string(),
-                    inclusion_mode: "signature_only".to_string(),
+                    inclusion_mode: InclusionMode::SignatureOnly,
                     content: None,
                     signatures: Some(vec!["fn parse() -> Result<()>".to_string()]),
                     summary: None,

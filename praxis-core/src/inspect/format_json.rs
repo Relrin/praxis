@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 use crate::diff::DiffBundle;
+use crate::inclusion::InclusionMode;
 use crate::output::ContextBundle;
 
 /// Structured JSON audit output for ContextBundle.
@@ -40,7 +41,7 @@ pub struct FilesAudit {
 pub struct TopFileAudit {
     pub path: String,
     pub relevance_score: f64,
-    pub inclusion_mode: String,
+    pub inclusion_mode: InclusionMode,
     pub estimated_tokens: usize,
 }
 
@@ -99,9 +100,9 @@ pub fn context_audit_json(
     bundle: &ContextBundle,
     warnings: Vec<String>,
 ) -> anyhow::Result<String> {
-    let full = count_mode(&bundle.relevant_files, "full");
-    let sig = count_mode(&bundle.relevant_files, "signature_only");
-    let sum = count_mode(&bundle.relevant_files, "summary_only");
+    let full = count_mode(&bundle.relevant_files, InclusionMode::Full);
+    let sig = count_mode(&bundle.relevant_files, InclusionMode::SignatureOnly);
+    let sum = count_mode(&bundle.relevant_files, InclusionMode::SummaryOnly);
     let included = full + sig + sum;
     let skipped = bundle.relevant_files.len() - included;
 
@@ -118,7 +119,7 @@ pub fn context_audit_json(
         .map(|f| TopFileAudit {
             path: f.path.clone(),
             relevance_score: f.relevance_score,
-            inclusion_mode: f.inclusion_mode.clone(),
+            inclusion_mode: f.inclusion_mode,
             estimated_tokens: f.estimated_tokens,
         })
         .collect();
@@ -209,7 +210,7 @@ pub fn diff_audit_json(
         .map_err(|e| anyhow::anyhow!("JSON serialization failed: {e}"))
 }
 
-fn count_mode(files: &[crate::output::RelevantFile], mode: &str) -> usize {
+fn count_mode(files: &[crate::output::RelevantFile], mode: InclusionMode) -> usize {
     files.iter().filter(|f| f.inclusion_mode == mode).count()
 }
 
@@ -226,7 +227,7 @@ mod tests {
             file_tree: String::new(),
             relevant_files: vec![RelevantFile {
                 path: "src/main.rs".to_string(),
-                inclusion_mode: "full".to_string(),
+                inclusion_mode: InclusionMode::Full,
                 content: None,
                 signatures: None,
                 summary: None,
