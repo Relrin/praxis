@@ -1,17 +1,17 @@
 use indexmap::IndexMap;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::budget::BudgetBreakdown;
 use crate::inclusion::{IncludedFile, InclusionMode};
-use crate::types::{Dependency, Symbol, SymbolKind};
+use crate::types::{ConversationMemory, Dependency, Symbol, SymbolKind};
 
 
 const SCHEMA_VERSION: &str = "0.1";
 
 /// Top-level context bundle produced by `praxis build`.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContextBundle {
-    pub schema_version: &'static str,
+    pub schema_version: String,
     pub task: String,
     pub repo_summary: String,
     pub file_tree: String,
@@ -20,11 +20,13 @@ pub struct ContextBundle {
     pub dependency_graph: Vec<DependencyEntry>,
     pub token_budget: TokenBudget,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub conversation_memory: Option<ConversationMemory>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub warnings: Option<Vec<String>>,
 }
 
 /// A file included in the context bundle with its content or summaries.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelevantFile {
     pub path: String,
     pub inclusion_mode: String,
@@ -39,7 +41,7 @@ pub struct RelevantFile {
 }
 
 /// Symbol graph organized by kind.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SymbolGraph {
     pub functions: Vec<SymbolEntry>,
     pub structs: Vec<SymbolEntry>,
@@ -53,7 +55,7 @@ pub struct SymbolGraph {
 }
 
 /// A single entry in the symbol graph.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SymbolEntry {
     pub name: String,
     pub file: String,
@@ -62,7 +64,7 @@ pub struct SymbolEntry {
 }
 
 /// A dependency in the dependency graph.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DependencyEntry {
     pub name: String,
     pub version: Option<String>,
@@ -70,16 +72,16 @@ pub struct DependencyEntry {
 }
 
 /// Token budget breakdown in the output.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenBudget {
-    pub total_declared: usize,
-    pub total_effective: usize,
+    pub declared: usize,
+    pub effective: usize,
     pub task: usize,
     pub repo_summary: usize,
     pub memory: usize,
     pub safety: usize,
     pub code: usize,
-    pub strict_mode: bool,
+    pub strict: bool,
     pub overflow: bool,
 }
 
@@ -124,7 +126,7 @@ pub fn build_context_bundle(
     };
 
     ContextBundle {
-        schema_version: SCHEMA_VERSION,
+        schema_version: SCHEMA_VERSION.to_string(),
         task,
         repo_summary,
         file_tree,
@@ -132,6 +134,7 @@ pub fn build_context_bundle(
         symbol_graph,
         dependency_graph,
         token_budget,
+        conversation_memory: None,
         warnings,
     }
 }
@@ -229,14 +232,14 @@ fn build_dependency_graph(dependencies: &[Dependency]) -> Vec<DependencyEntry> {
 
 fn build_token_budget(breakdown: &BudgetBreakdown) -> TokenBudget {
     TokenBudget {
-        total_declared: breakdown.total_declared,
-        total_effective: breakdown.total_effective,
+        declared: breakdown.total_declared,
+        effective: breakdown.total_effective,
         task: breakdown.task,
         repo_summary: breakdown.repo_summary,
         memory: breakdown.memory,
         safety: breakdown.safety,
         code: breakdown.code,
-        strict_mode: breakdown.strict,
+        strict: breakdown.strict,
         overflow: breakdown.overflow,
     }
 }

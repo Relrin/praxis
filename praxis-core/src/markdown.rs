@@ -49,14 +49,14 @@ fn render_token_budget(out: &mut String, bundle: &ContextBundle) {
     out.push_str("## Token Budget\n\n");
     out.push_str("| Bucket | Tokens |\n");
     out.push_str("|---|---|\n");
-    out.push_str(&format!("| Total Declared | {} |\n", tb.total_declared));
-    out.push_str(&format!("| Total Effective | {} |\n", tb.total_effective));
+    out.push_str(&format!("| Declared | {} |\n", tb.declared));
+    out.push_str(&format!("| Effective | {} |\n", tb.effective));
     out.push_str(&format!("| Task | {} |\n", tb.task));
     out.push_str(&format!("| Repo Summary | {} |\n", tb.repo_summary));
     out.push_str(&format!("| Memory | {} |\n", tb.memory));
     out.push_str(&format!("| Safety | {} |\n", tb.safety));
     out.push_str(&format!("| Code | {} |\n", tb.code));
-    out.push_str(&format!("| Strict Mode | {} |\n", tb.strict_mode));
+    out.push_str(&format!("| Strict | {} |\n", tb.strict));
     out.push_str(&format!("| Overflow | {} |\n", tb.overflow));
     out.push('\n');
 }
@@ -164,7 +164,7 @@ mod tests {
 
     fn minimal_bundle() -> ContextBundle {
         ContextBundle {
-            schema_version: "0.1",
+            schema_version: "0.1".to_string(),
             task: "fix the parser".to_string(),
             repo_summary: "A small Rust project.".to_string(),
             file_tree: "my-project/\n├── Cargo.toml\n└── src/\n    └── main.rs\n".to_string(),
@@ -210,16 +210,17 @@ mod tests {
                 features: vec!["derive".to_string()],
             }],
             token_budget: TokenBudget {
-                total_declared: 8000,
-                total_effective: 8800,
+                declared: 8000,
+                effective: 8800,
                 task: 3,
                 repo_summary: 440,
                 memory: 1760,
                 safety: 440,
                 code: 6157,
-                strict_mode: false,
+                strict: false,
                 overflow: false,
             },
+            conversation_memory: None,
             warnings: None,
         }
     }
@@ -247,7 +248,7 @@ mod tests {
     #[test]
     fn markdown_contains_token_budget_table() {
         let md = render_markdown(&minimal_bundle());
-        assert!(md.contains("| Total Declared | 8000 |"));
+        assert!(md.contains("| Declared | 8000 |"));
         assert!(md.contains("| Code | 6157 |"));
     }
 

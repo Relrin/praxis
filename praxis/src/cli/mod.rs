@@ -1,6 +1,7 @@
 mod build;
 mod common;
 mod diff;
+mod inspect;
 mod summarize;
 
 use anyhow::Result;
@@ -18,6 +19,7 @@ enum Command {
     Build(build::BuildArgs),
     Summarize(summarize::SummarizeArgs),
     Diff(diff::DiffArgs),
+    Inspect(inspect::InspectArgs),
 }
 
 /// Parses CLI arguments and dispatches to the appropriate subcommand.
@@ -28,5 +30,6 @@ pub fn execute() -> Result<()> {
         Command::Build(args) => build::execute(args),
         Command::Summarize(args) => summarize::execute(args),
         Command::Diff(args) => diff::execute(args),
+        Command::Inspect(args) => inspect::execute(args),
     }
 }

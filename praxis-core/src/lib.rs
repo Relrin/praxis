@@ -11,3 +11,4 @@ pub mod tree;
 pub mod util;
 pub mod conversation;
 pub mod diff;
+pub mod inspect;

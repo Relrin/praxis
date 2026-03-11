@@ -530,6 +530,7 @@ dependencies = [
  "praxis-lang-python",
  "praxis-lang-rust",
  "praxis-lang-ts",
+ "serde_json",
 ]
 
 [[package]]
