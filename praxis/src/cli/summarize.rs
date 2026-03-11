@@ -16,11 +16,7 @@ pub enum SummarizeMode {
     DecisionFocused,
 }
 
-#[derive(Debug, Clone, Copy, clap::ValueEnum)]
-pub enum OutputFormat {
-    Json,
-    Markdown,
-}
+use super::common::OutputFormat;
 
 #[derive(Parser)]
 pub struct SummarizeArgs {

@@ -54,6 +54,14 @@ impl ConversationMemory {
         self.open_questions.iter().filter(|q| q.resolved_by.is_some()).count()
     }
 
+    /// Returns an iterator over all extracted items (constraints, decisions, open questions).
+    pub fn all_items(&self) -> impl Iterator<Item = &ExtractedLine> {
+        self.constraints
+            .iter()
+            .chain(self.decisions.iter())
+            .chain(self.open_questions.iter())
+    }
+
     /// Estimate token cost using the chars/4 heuristic.
     pub fn estimated_tokens(&self) -> usize {
         let char_count: usize = self.constraints.iter().map(|l| l.text.len()).sum::<usize>()
@@ -117,5 +125,17 @@ mod tests {
         });
         // total = 28 chars / 4 = 7
         assert_eq!(mem.estimated_tokens(), 7);
+    }
+
+    #[test]
+    fn all_items_chains_all_categories() {
+        let mut mem = ConversationMemory::new(3);
+        mem.constraints.push(make_line("c1", Classification::Constraint));
+        mem.decisions.push(make_line("d1", Classification::Decision));
+        mem.open_questions.push(make_line("q1", Classification::OpenQuestion));
+        mem.open_questions.push(make_line("q2", Classification::OpenQuestion));
+
+        let texts: Vec<&str> = mem.all_items().map(|i| i.text.as_str()).collect();
+        assert_eq!(texts, vec!["c1", "d1", "q1", "q2"]);
     }
 }

@@ -10,8 +10,10 @@ name = "praxis"
 path = "src/main.rs"
 
 [dependencies]
-anyhow.workspace = true
-clap.workspace   = true
+anyhow.workspace   = true
+clap.workspace     = true
+git2.workspace     = true
+indexmap.workspace = true
 
 praxis-core        = { path = "../praxis-core" }
 praxis-lang-go     = { path = "../praxis-lang-go" }

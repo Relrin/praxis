@@ -15,7 +15,7 @@ use praxis_core::scorer::{score_file, sort_scored_files, ScoredFile};
 use praxis_core::tokenizer::tokenize_text;
 use praxis_core::tree::render_file_tree;
 use praxis_core::types::FileEntry;
-
+use praxis_core::util::path::to_posix_path;
 
 
 #[derive(Parser)]
@@ -107,7 +107,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
             &dep_names,
         );
 
-        let path = file.path.to_string_lossy().replace('\\', "/");
+        let path = to_posix_path(&file.path);
         scored_files.push(ScoredFile {
             path,
             score,
@@ -300,7 +300,7 @@ fn build_repo_summary(files: &[FileEntry], plugins: &PluginRegistry) -> String {
             continue;
         };
 
-        let path = file.path.to_string_lossy().replace('\\', "/");
+        let path = to_posix_path(&file.path);
         summaries.push(format!("- {path}: {summary}"));
     }
 

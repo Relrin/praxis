@@ -1,4 +1,6 @@
 mod build;
+mod common;
+mod diff;
 mod summarize;
 
 use anyhow::Result;
@@ -15,6 +17,7 @@ struct Cli {
 enum Command {
     Build(build::BuildArgs),
     Summarize(summarize::SummarizeArgs),
+    Diff(diff::DiffArgs),
 }
 
 /// Parses CLI arguments and dispatches to the appropriate subcommand.
@@ -24,5 +27,6 @@ pub fn execute() -> Result<()> {
     match cli.command {
         Command::Build(args) => build::execute(args),
         Command::Summarize(args) => summarize::execute(args),
+        Command::Diff(args) => diff::execute(args),
     }
 }

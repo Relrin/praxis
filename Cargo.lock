@@ -523,6 +523,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "git2",
+ "indexmap",
  "praxis-core",
  "praxis-lang-go",
  "praxis-lang-python",
