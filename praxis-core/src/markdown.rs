@@ -31,6 +31,11 @@ pub fn render_markdown(bundle: &ContextBundle) -> String {
 
     render_dependencies(&mut out, bundle);
 
+    if let Some(ref memory) = bundle.conversation_memory {
+        out.push_str("---\n\n");
+        render_conversation_memory(&mut out, memory);
+    }
+
     if let Some(warnings) = &bundle.warnings {
         out.push_str("---\n\n");
         out.push_str("## Warnings\n\n");
@@ -41,6 +46,58 @@ pub fn render_markdown(bundle: &ContextBundle) -> String {
     }
 
     out
+}
+
+fn render_conversation_memory(out: &mut String, memory: &crate::types::ConversationMemory) {
+    out.push_str("## Conversation Memory\n\n");
+
+    if !memory.constraints.is_empty() {
+        out.push_str("### Constraints\n\n");
+        for item in &memory.constraints {
+            out.push_str(&format!(
+                "- [turn {}] {} (confidence: {:.2})\n",
+                item.turn_index, item.text, item.confidence
+            ));
+        }
+        out.push('\n');
+    }
+
+    if !memory.decisions.is_empty() {
+        out.push_str("### Decisions\n\n");
+        for item in &memory.decisions {
+            out.push_str(&format!(
+                "- [turn {}] {} (confidence: {:.2})\n",
+                item.turn_index, item.text, item.confidence
+            ));
+        }
+        out.push('\n');
+    }
+
+    if !memory.open_questions.is_empty() {
+        out.push_str("### Open Questions\n\n");
+        for item in &memory.open_questions {
+            let resolved = match item.resolved_by {
+                Some(turn) => format!(" (resolved at turn {})", turn),
+                None => String::new(),
+            };
+            out.push_str(&format!(
+                "- [turn {}] {}{}\n",
+                item.turn_index, item.text, resolved
+            ));
+        }
+        out.push('\n');
+    }
+
+    if !memory.stage_markers.is_empty() {
+        out.push_str("### Stage Markers\n\n");
+        for marker in &memory.stage_markers {
+            out.push_str(&format!(
+                "- [turn {}] {}\n",
+                marker.turn_index, marker.file
+            ));
+        }
+        out.push('\n');
+    }
 }
 
 fn render_token_budget(out: &mut String, bundle: &ContextBundle) {

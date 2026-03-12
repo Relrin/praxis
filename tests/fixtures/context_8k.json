@@ -1,0 +1,147 @@
+{
+  "schema_version": "0.1",
+  "task": "Add OAuth2 authentication to the API",
+  "repo_summary": "- src/auth.rs: Authentication module\n- src/middleware.rs: Request middleware\n- src/handler.rs: HTTP handlers\n- src/token.rs: Token management\n- Cargo.toml: Project manifest",
+  "file_tree": "my-project/\n├── Cargo.toml\n├── src/\n│   ├── auth.rs\n│   ├── handler.rs\n│   ├── lib.rs\n│   ├── main.rs\n│   ├── middleware.rs\n│   ├── token.rs\n│   ├── config.rs\n│   ├── error.rs\n│   ├── routes.rs\n│   ├── db.rs\n│   ├── models.rs\n│   └── utils.rs\n",
+  "relevant_files": [
+    {
+      "path": "src/auth.rs",
+      "inclusion_mode": "full",
+      "content": "pub fn verify_token(token: &str, ctx: &AuthCtx) -> Result<Claims> {\n    ctx.validate(token)\n}\n\npub fn refresh_token(token: &str) -> Result<String> {\n    Ok(format!(\"refreshed_{}\", token))\n}\n",
+      "relevance_score": 0.95,
+      "estimated_tokens": 45
+    },
+    {
+      "path": "src/middleware.rs",
+      "inclusion_mode": "full",
+      "content": "use crate::auth;\n\npub async fn auth_middleware(req: Request) -> Result<Response> {\n    let claims = auth::verify_token(&req.token, &req.ctx)?;\n    Ok(handle(req, claims))\n}\n",
+      "relevance_score": 0.88,
+      "estimated_tokens": 38
+    },
+    {
+      "path": "src/token.rs",
+      "inclusion_mode": "full",
+      "content": "pub struct Claims {\n    pub sub: String,\n    pub exp: u64,\n}\n\npub struct AuthCtx {\n    pub secret: String,\n}\n\nimpl AuthCtx {\n    pub fn validate(&self, token: &str) -> Result<Claims> {\n        Ok(Claims { sub: \"user\".into(), exp: 0 })\n    }\n}\n",
+      "relevance_score": 0.85,
+      "estimated_tokens": 52
+    },
+    {
+      "path": "src/handler.rs",
+      "inclusion_mode": "full",
+      "content": "use crate::auth;\n\npub fn login_handler(req: Request) -> Response {\n    let valid = auth::verify_token(&req.token);\n    if valid {\n        Response::ok()\n    } else {\n        Response::forbidden()\n    }\n}\n",
+      "relevance_score": 0.78,
+      "estimated_tokens": 35
+    },
+    {
+      "path": "src/config.rs",
+      "inclusion_mode": "full",
+      "content": "pub struct Config {\n    pub secret: String,\n    pub token_expiry: u64,\n    pub port: u16,\n}\n\nimpl Config {\n    pub fn from_env() -> Self {\n        Config {\n            secret: std::env::var(\"SECRET\").unwrap_or_default(),\n            token_expiry: 3600,\n            port: 8080,\n        }\n    }\n}\n",
+      "relevance_score": 0.72,
+      "estimated_tokens": 48
+    },
+    {
+      "path": "src/routes.rs",
+      "inclusion_mode": "full",
+      "content": "pub fn configure_routes(app: &mut App) {\n    app.route(\"/login\", post(login_handler));\n    app.route(\"/refresh\", post(refresh_handler));\n    app.route(\"/protected\", get(protected_handler));\n}\n",
+      "relevance_score": 0.65,
+      "estimated_tokens": 30
+    },
+    {
+      "path": "src/error.rs",
+      "inclusion_mode": "signature_only",
+      "signatures": [
+        "pub enum AppError",
+        "impl From<AuthError> for AppError",
+        "impl IntoResponse for AppError"
+      ],
+      "relevance_score": 0.58,
+      "estimated_tokens": 18
+    },
+    {
+      "path": "src/main.rs",
+      "inclusion_mode": "signature_only",
+      "signatures": [
+        "async fn main() -> Result<()>",
+        "fn setup_logging()"
+      ],
+      "relevance_score": 0.52,
+      "estimated_tokens": 12
+    },
+    {
+      "path": "src/lib.rs",
+      "inclusion_mode": "signature_only",
+      "signatures": [
+        "pub mod auth",
+        "pub mod handler",
+        "pub mod middleware",
+        "pub mod token",
+        "pub mod config"
+      ],
+      "relevance_score": 0.48,
+      "estimated_tokens": 10
+    },
+    {
+      "path": "src/db.rs",
+      "inclusion_mode": "summary_only",
+      "summary": "Database connection pool and query helpers for user sessions.",
+      "relevance_score": 0.35,
+      "estimated_tokens": 14
+    },
+    {
+      "path": "src/models.rs",
+      "inclusion_mode": "summary_only",
+      "summary": "Data models for User, Session, and Token entities.",
+      "relevance_score": 0.30,
+      "estimated_tokens": 12
+    },
+    {
+      "path": "src/utils.rs",
+      "inclusion_mode": "skipped",
+      "relevance_score": 0.12,
+      "estimated_tokens": 0
+    }
+  ],
+  "symbol_graph": {
+    "functions": [
+      {"name": "verify_token", "file": "src/auth.rs", "visibility": "public", "signature": "pub fn verify_token(token: &str, ctx: &AuthCtx) -> Result<Claims>"},
+      {"name": "refresh_token", "file": "src/auth.rs", "visibility": "public", "signature": "pub fn refresh_token(token: &str) -> Result<String>"},
+      {"name": "auth_middleware", "file": "src/middleware.rs", "visibility": "public", "signature": "pub async fn auth_middleware(req: Request) -> Result<Response>"},
+      {"name": "login_handler", "file": "src/handler.rs", "visibility": "public", "signature": "pub fn login_handler(req: Request) -> Response"},
+      {"name": "configure_routes", "file": "src/routes.rs", "visibility": "public", "signature": "pub fn configure_routes(app: &mut App)"},
+      {"name": "from_env", "file": "src/config.rs", "visibility": "public", "signature": "pub fn from_env() -> Self"}
+    ],
+    "structs": [
+      {"name": "Claims", "file": "src/token.rs", "visibility": "public", "signature": "pub struct Claims"},
+      {"name": "AuthCtx", "file": "src/token.rs", "visibility": "public", "signature": "pub struct AuthCtx"},
+      {"name": "Config", "file": "src/config.rs", "visibility": "public", "signature": "pub struct Config"}
+    ],
+    "classes": [],
+    "enums": [
+      {"name": "AppError", "file": "src/error.rs", "visibility": "public", "signature": "pub enum AppError"}
+    ],
+    "traits": [],
+    "interfaces": [],
+    "modules": [],
+    "methods": [
+      {"name": "validate", "file": "src/token.rs", "visibility": "public", "signature": "pub fn validate(&self, token: &str) -> Result<Claims>"}
+    ],
+    "constants": []
+  },
+  "dependency_graph": [
+    {"name": "serde", "version": "1.0.195", "features": ["derive"]},
+    {"name": "tokio", "version": "1.35", "features": ["full"]},
+    {"name": "jsonwebtoken", "version": "9.2", "features": []},
+    {"name": "anyhow", "version": "1.0", "features": []}
+  ],
+  "token_budget": {
+    "declared": 8000,
+    "effective": 8800,
+    "task": 10,
+    "repo_summary": 440,
+    "memory": 1760,
+    "safety": 440,
+    "code": 6150,
+    "strict": false,
+    "overflow": false
+  }
+}

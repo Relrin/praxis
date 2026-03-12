@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 use praxis_core::budget::{allocate_budget, BudgetConfig, TokenBudget};
+use praxis_core::conversation::{boost_relevance, extract, truncate_memory, ExtractionConfig};
 use praxis_core::inclusion::{assign_inclusion_modes, IncludedFile, InclusionMode};
 use praxis_core::markdown::render_markdown;
 use praxis_core::output::{build_context_bundle, serialize_json, ContextBundle};
@@ -56,6 +57,11 @@ pub struct BuildArgs {
     /// Write output to stdout instead of a file.
     #[arg(long, default_value_t = false)]
     stdout: bool,
+
+    /// Path to a conversation file. Extracts memory and boosts file relevance
+    /// based on stage markers (file mentions) in the conversation.
+    #[arg(long)]
+    conversation: Option<PathBuf>,
 }
 
 pub fn execute(args: BuildArgs) -> Result<()> {
@@ -106,6 +112,49 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     }
     sort_scored_files(&mut scored_files);
 
+    // Phase 2: If --conversation provided, extract memory and boost file scores
+    let mut conversation_memory = None;
+    if let Some(ref conv_path) = args.conversation {
+        let conv_content = std::fs::read_to_string(conv_path)
+            .with_context(|| format!("failed to read conversation file: {}", conv_path.display()))?;
+        let config = ExtractionConfig::default();
+        let memory = extract(&conv_content, &config);
+
+        eprintln!(
+            "  Conversation: {} items extracted, {} stage markers",
+            memory.item_count(),
+            memory.stage_markers.len()
+        );
+
+        // Boost file scores based on stage marker mentions
+        for scored in &mut scored_files {
+            let mentions: Vec<&_> = memory
+                .stage_markers
+                .iter()
+                .filter(|m| scored.path.ends_with(&m.file) || m.file.ends_with(&scored.path))
+                .collect();
+
+            if !mentions.is_empty() {
+                let mention_count = mentions.len();
+                let avg_confidence: f32 = memory
+                    .all_items()
+                    .filter(|item| {
+                        mentions.iter().any(|m| m.turn_index == item.turn_index)
+                    })
+                    .map(|item| item.confidence)
+                    .sum::<f32>()
+                    / mention_count.max(1) as f32;
+
+                scored.score = boost_relevance(scored.score, mention_count, avg_confidence);
+            }
+        }
+
+        // Re-sort after boosting
+        sort_scored_files(&mut scored_files);
+
+        conversation_memory = Some(memory);
+    }
+
     let budget_config = BudgetConfig::new(args.token_budget)
         .with_strict(args.strict)
         .with_buffer_pct(args.buffer_pct);
@@ -140,7 +189,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
 
     let file_tree = render_file_tree(&file_paths, &repo_name);
 
-    let bundle = build_context_bundle(
+    let mut bundle = build_context_bundle(
         args.task.clone(),
         repo_summary,
         file_tree,
@@ -149,6 +198,18 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         &index.dependencies,
         &budget,
     );
+
+    // Attach conversation memory, truncated to fit the memory budget
+    if let Some(mut memory) = conversation_memory {
+        let truncated = truncate_memory(&mut memory, budget.memory);
+        if truncated {
+            eprintln!("  Conversation memory truncated to fit {} token budget", budget.memory);
+        }
+        // Only attach if there's any content left after truncation
+        if memory.item_count() > 0 || !memory.stage_markers.is_empty() {
+            bundle.conversation_memory = Some(memory);
+        }
+    }
 
     if args.stdout {
         write_stdout(&bundle, &args.format)?;

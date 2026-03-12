@@ -1,0 +1,123 @@
+{
+  "schema_version": "0.1",
+  "from_ref": "HEAD~1",
+  "to_ref": "HEAD",
+  "changed_files": [
+    {
+      "path": "src/auth.rs",
+      "kind": {
+        "type": "modified"
+      },
+      "added_lines": 8,
+      "removed_lines": 6,
+      "estimated_tokens": 45,
+      "fingerprint": 12345,
+      "hunks": [
+        {
+          "old_start": 1,
+          "old_count": 7,
+          "new_start": 1,
+          "new_count": 9,
+          "fingerprint": 11111
+        }
+      ]
+    },
+    {
+      "path": "src/middleware.rs",
+      "kind": {
+        "type": "modified"
+      },
+      "added_lines": 3,
+      "removed_lines": 3,
+      "estimated_tokens": 38,
+      "fingerprint": 23456,
+      "hunks": [
+        {
+          "old_start": 3,
+          "old_count": 5,
+          "new_start": 3,
+          "new_count": 5,
+          "fingerprint": 22222
+        }
+      ]
+    },
+    {
+      "path": "src/token.rs",
+      "kind": {
+        "type": "added"
+      },
+      "added_lines": 15,
+      "removed_lines": 0,
+      "estimated_tokens": 52,
+      "fingerprint": 34567
+    }
+  ],
+  "symbol_changes": [
+    {
+      "file": "src/auth.rs",
+      "symbol_name": "verify_token",
+      "kind": "function",
+      "change": {
+        "type": "signature_changed",
+        "from": "pub fn verify_token(token: &str) -> bool",
+        "to": "pub fn verify_token(token: &str, ctx: &AuthCtx) -> Result<Claims>"
+      },
+      "fingerprint": 44444
+    },
+    {
+      "file": "src/auth.rs",
+      "symbol_name": "refresh_token",
+      "kind": "function",
+      "change": {
+        "type": "added"
+      },
+      "fingerprint": 55555
+    },
+    {
+      "file": "src/auth.rs",
+      "symbol_name": "check_session",
+      "kind": "function",
+      "change": {
+        "type": "removed"
+      },
+      "fingerprint": 66666
+    },
+    {
+      "file": "src/middleware.rs",
+      "symbol_name": "auth_middleware",
+      "kind": "function",
+      "change": {
+        "type": "signature_changed",
+        "from": "pub fn auth_middleware(req: Request) -> Response",
+        "to": "pub async fn auth_middleware(req: Request) -> Result<Response>"
+      },
+      "fingerprint": 77777
+    }
+  ],
+  "impact_radius": {
+    "references": {
+      "function::verify_token": [
+        "src/middleware.rs",
+        "src/handler.rs"
+      ],
+      "function::check_session": [
+        "src/middleware.rs"
+      ]
+    },
+    "affected_files": [
+      "src/middleware.rs",
+      "src/handler.rs"
+    ]
+  },
+  "stats": {
+    "files_added": 1,
+    "files_modified": 2,
+    "files_deleted": 0,
+    "files_renamed": 0,
+    "symbols_added": 1,
+    "symbols_removed": 1,
+    "symbols_signature_changed": 2,
+    "total_lines_added": 26,
+    "total_lines_removed": 9
+  }
+}

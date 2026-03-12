@@ -5,6 +5,7 @@ members = [
     "praxis-lang-rust",
     "praxis-lang-go",
     "praxis-lang-ts",
+    "praxis-lang-python",
 ]
 resolver = "2"
 

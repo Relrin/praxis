@@ -39,7 +39,7 @@ pub struct ChangedFile {
     /// Hunk boundaries from the git diff.
     /// Empty for Added and Deleted files (the entire file is the "hunk").
     /// Populated for Modified and Renamed files.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hunks: Vec<DiffHunk>,
 }
 
