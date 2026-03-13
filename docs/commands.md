@@ -18,6 +18,12 @@ Build a context bundle from a repository.
 | `--max-file-size` | integer | `204800` | Maximum file size in bytes to include |
 | `--stdout` | bool | `false` | Write output to stdout instead of a file |
 | `--conversation` | path | none | Path to a conversation file for memory extraction |
+| `--vector` | bool | `false` | Enable vector-enhanced scoring (requires `vector` feature) |
+| `--vector-weight` | float | `0.30` | Weight for vector similarity in hybrid score (0.0-1.0) |
+
+### New in Phase 3: --vector
+
+When `--vector` is provided, praxis runs incremental vector indexing and blends semantic similarity with deterministic scores. See [vector-indexing.md](vector-indexing.md) for details.
 
 ### New in Phase 2: --conversation
 
@@ -172,3 +178,35 @@ praxis prune context.json --token-budget 2000 --preserve-files src/auth.rs,src/m
 # Strict mode with custom output
 praxis prune context.json --token-budget 3000 --strict --output small.json
 ```
+
+---
+
+## praxis index
+
+Build or update the vector index for a repository. Requires the `vector` feature.
+
+### Flags
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--repo` | path | `.` | Path to the repository root |
+| `--max-file-size` | integer | `204800` | Maximum file size in bytes to include |
+| `--force` | bool | `false` | Drop and rebuild the entire vector index from scratch |
+
+### Examples
+
+```bash
+# Incremental index (only changed files)
+praxis index --repo ./my-project
+
+# Force full re-index
+praxis index --repo ./my-project --force
+
+# Build with vector-enhanced scoring
+praxis build --task "fix auth" --repo ./my-project --vector
+
+# Custom vector weight
+praxis build --task "fix auth" --vector --vector-weight 0.5
+```
+
+See [vector-indexing.md](vector-indexing.md) for full documentation.

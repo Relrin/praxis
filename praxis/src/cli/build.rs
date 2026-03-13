@@ -62,6 +62,16 @@ pub struct BuildArgs {
     /// based on stage markers (file mentions) in the conversation.
     #[arg(long)]
     conversation: Option<PathBuf>,
+
+    /// Enable vector-enhanced scoring using the local vector index.
+    /// Requires the 'vector' feature to be enabled at build time.
+    #[arg(long, default_value_t = false)]
+    vector: bool,
+
+    /// Weight for vector similarity in hybrid score (0.0 to 1.0).
+    /// Only used when --vector is enabled.
+    #[arg(long)]
+    vector_weight: Option<f64>,
 }
 
 pub fn execute(args: BuildArgs) -> Result<()> {
@@ -111,6 +121,57 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         });
     }
     sort_scored_files(&mut scored_files);
+
+    // Vector-enhanced scoring (requires --features vector)
+    #[cfg(feature = "vector")]
+    if args.vector {
+        let vector_config = praxis_vector::config::load_config(&args.repo)
+            .context("failed to load vector config")?;
+
+        eprintln!("  Initializing vector index...");
+        let indexer = praxis_vector::indexer::VectorIndexer::new(&args.repo, &vector_config)
+            .context("failed to create vector indexer")?;
+
+        let stats = indexer
+            .index_incremental(&index.files, &index.symbols)
+            .context("vector indexing failed")?;
+        eprintln!(
+            "  Vector index: {} indexed, {} unchanged, {} removed ({:.2}s)",
+            stats.files_indexed,
+            stats.files_unchanged,
+            stats.files_removed,
+            stats.elapsed_secs
+        );
+
+        let vector_scores = indexer
+            .query_task(&args.task, vector_config.top_k)
+            .context("vector query failed")?;
+
+        let weight = args
+            .vector_weight
+            .unwrap_or(vector_config.vector_weight);
+
+        for scored in &mut scored_files {
+            if let Some(vs) = vector_scores
+                .iter()
+                .find(|v| v.file_path == scored.path)
+            {
+                scored.score =
+                    praxis_vector::scorer::hybrid_score(scored.score, vs, weight);
+            }
+        }
+
+        // Re-sort after hybrid scoring
+        sort_scored_files(&mut scored_files);
+    }
+
+    #[cfg(not(feature = "vector"))]
+    if args.vector {
+        anyhow::bail!(
+            "Vector scoring requires the 'vector' feature. \
+             Rebuild with: cargo build --features vector"
+        );
+    }
 
     // Phase 2: If --conversation provided, extract memory and boost file scores
     let mut conversation_memory = None;

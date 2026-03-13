@@ -1,6 +1,7 @@
 mod build;
 mod common;
 mod diff;
+mod index;
 mod inspect;
 mod prune;
 mod summarize;
@@ -27,6 +28,8 @@ enum Command {
     Inspect(inspect::InspectArgs),
     /// Re-run budget allocation on an existing bundle with a new budget
     Prune(prune::PruneArgs),
+    /// Build or update the vector index for a repository
+    Index(index::IndexArgs),
 }
 
 /// Parses CLI arguments and dispatches to the appropriate subcommand.
@@ -39,5 +42,6 @@ pub fn execute() -> Result<()> {
         Command::Diff(args) => diff::execute(args),
         Command::Inspect(args) => inspect::execute(args),
         Command::Prune(args) => prune::execute(args),
+        Command::Index(args) => index::execute(args),
     }
 }

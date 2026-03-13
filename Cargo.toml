@@ -6,6 +6,7 @@ members = [
     "praxis-lang-go",
     "praxis-lang-ts",
     "praxis-lang-python",
+    "praxis-vector",
 ]
 resolver = "2"
 
@@ -25,3 +26,14 @@ regex = "1.12.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.148"
 walkdir = "2.5.0"
+
+# Vector DB integration (feature-gated)
+lancedb = "0.26.2"
+fastembed = "5.12.1"
+sha2 = "0.10.9"
+rayon = "1.11.0"
+toml = "1.0.6"
+arrow-array = "57.3.0"
+arrow-schema = "57.3.0"
+tokio = { version = "1.50.0", features = ["rt-multi-thread"] }
+tempfile = "3.27.0"
