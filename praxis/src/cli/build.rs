@@ -64,9 +64,14 @@ pub struct BuildArgs {
     conversation: Option<PathBuf>,
 
     /// Enable vector-enhanced scoring using the local vector index.
-    /// Requires the 'vector' feature to be enabled at build time.
-    #[arg(long, default_value_t = false)]
+    /// Enabled by default when built with the 'vector' feature.
+    /// Use --no-vector to disable.
+    #[arg(long, default_value_t = cfg!(feature = "vector"))]
     vector: bool,
+
+    /// Disable vector-enhanced scoring even when the feature is available.
+    #[arg(long = "no-vector", default_value_t = false)]
+    no_vector: bool,
 
     /// Weight for vector similarity in hybrid score (0.0 to 1.0).
     /// Only used when --vector is enabled.
@@ -123,8 +128,10 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     sort_scored_files(&mut scored_files);
 
     // Vector-enhanced scoring (requires --features vector)
+    let use_vector = args.vector && !args.no_vector;
+
     #[cfg(feature = "vector")]
-    if args.vector {
+    if use_vector {
         let vector_config = praxis_vector::config::load_config(&args.repo)
             .context("failed to load vector config")?;
 
@@ -166,7 +173,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     }
 
     #[cfg(not(feature = "vector"))]
-    if args.vector {
+    if use_vector {
         anyhow::bail!(
             "Vector scoring requires the 'vector' feature. \
              Rebuild with: cargo build --features vector"
