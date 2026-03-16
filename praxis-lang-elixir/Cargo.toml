@@ -1,0 +1,14 @@
+[package]
+name = "praxis-lang-elixir"
+edition = "2024"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+tree-sitter = "0.26.6"
+tree-sitter-elixir = "0.3.5"
+
+regex.workspace = true
+
+praxis-core = { path = "../praxis-core" }
