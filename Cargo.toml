@@ -2,6 +2,9 @@
 members = [
     "praxis",
     "praxis-core",
+    "praxis-lang-angelscript",
+    "praxis-lang-cpp",
+    "praxis-lang-elixir",
     "praxis-lang-rust",
     "praxis-lang-go",
     "praxis-lang-ts",

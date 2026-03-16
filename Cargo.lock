@@ -4795,6 +4795,9 @@ dependencies = [
  "git2",
  "indexmap 2.13.0",
  "praxis-core",
+ "praxis-lang-angelscript",
+ "praxis-lang-cpp",
+ "praxis-lang-elixir",
  "praxis-lang-go",
  "praxis-lang-python",
  "praxis-lang-rust",
@@ -4813,6 +4816,34 @@ dependencies = [
  "indexmap 2.13.0",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "praxis-lang-angelscript"
+version = "0.1.0"
+dependencies = [
+ "praxis-core",
+ "tree-sitter",
+ "tree-sitter-angelscript",
+]
+
+[[package]]
+name = "praxis-lang-cpp"
+version = "0.1.0"
+dependencies = [
+ "praxis-core",
+ "tree-sitter",
+ "tree-sitter-cpp",
+]
+
+[[package]]
+name = "praxis-lang-elixir"
+version = "0.1.0"
+dependencies = [
+ "praxis-core",
+ "regex",
+ "tree-sitter",
+ "tree-sitter-elixir",
 ]
 
 [[package]]
@@ -6685,6 +6716,36 @@ dependencies = [
  "regex-syntax",
  "serde_json",
  "streaming-iterator",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-angelscript"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c0d1ae69208826217ee8f770b85dc91d2eb2bc7844edc8eb548e2c0408e898b"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-cpp"
+version = "0.23.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df2196ea9d47b4ab4a31b9297eaa5a5d19a0b121dceb9f118f6790ad0ab94743"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-elixir"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66dd064a762ed95bfc29857fa3cb7403bb1e5cb88112de0f6341b7e47284ba40"
+dependencies = [
+ "cc",
  "tree-sitter-language",
 ]
 

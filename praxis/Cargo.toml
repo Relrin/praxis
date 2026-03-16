@@ -20,11 +20,14 @@ git2.workspace       = true
 indexmap.workspace   = true
 serde_json.workspace = true
 
-praxis-core        = { path = "../praxis-core" }
-praxis-lang-go     = { path = "../praxis-lang-go" }
-praxis-lang-python = { path = "../praxis-lang-python" }
-praxis-lang-rust   = { path = "../praxis-lang-rust" }
-praxis-lang-ts     = { path = "../praxis-lang-ts" }
+praxis-core              = { path = "../praxis-core" }
+praxis-lang-angelscript  = { path = "../praxis-lang-angelscript" }
+praxis-lang-cpp          = { path = "../praxis-lang-cpp" }
+praxis-lang-elixir       = { path = "../praxis-lang-elixir" }
+praxis-lang-go           = { path = "../praxis-lang-go" }
+praxis-lang-python       = { path = "../praxis-lang-python" }
+praxis-lang-rust         = { path = "../praxis-lang-rust" }
+praxis-lang-ts           = { path = "../praxis-lang-ts" }
 praxis-vector      = { path = "../praxis-vector", optional = true }
 
 [dev-dependencies]
