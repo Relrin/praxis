@@ -1,0 +1,12 @@
+[package]
+name = "praxis-lang-cpp"
+edition = "2024"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+tree-sitter = "0.26.6"
+tree-sitter-cpp = "0.23.4"
+
+praxis-core = { path = "../praxis-core" }
