@@ -24,6 +24,12 @@ const CPP_SYMBOLS_QUERY: &str = r#"
 
 (namespace_definition
   (namespace_identifier) @name) @namespace
+
+(type_definition
+  (type_identifier) @name) @typedef
+
+(alias_declaration
+  (type_identifier) @name) @alias
 "#;
 
 pub struct CppAnalyzer;
@@ -74,6 +80,8 @@ impl LanguageAnalyzer for CppAnalyzer {
                 3 => (SymbolKind::Struct, "struct"),
                 4 => (SymbolKind::Enum, "enum_decl"),
                 5 => (SymbolKind::Module, "namespace"),
+                6 => (SymbolKind::TypeAlias, "typedef"),
+                7 => (SymbolKind::TypeAlias, "alias"),
                 _ => continue,
             };
 
@@ -312,6 +320,36 @@ mod tests {
             }
         }
         assert!(has_namespace);
+    }
+
+    #[test]
+    fn extracts_typedef() {
+        let file = make_file("types.h", "typedef int Handle;\n");
+        let analyzer = CppAnalyzer::new();
+        let symbols = analyzer.extract_symbols(&file);
+
+        let mut has_typedef = false;
+        for sym in &symbols {
+            if sym.kind == SymbolKind::TypeAlias && sym.name == "Handle" {
+                has_typedef = true;
+            }
+        }
+        assert!(has_typedef);
+    }
+
+    #[test]
+    fn extracts_using_alias() {
+        let file = make_file("types.h", "using StringVec = std::vector<std::string>;\n");
+        let analyzer = CppAnalyzer::new();
+        let symbols = analyzer.extract_symbols(&file);
+
+        let mut has_alias = false;
+        for sym in &symbols {
+            if sym.kind == SymbolKind::TypeAlias && sym.name == "StringVec" {
+                has_alias = true;
+            }
+        }
+        assert!(has_alias);
     }
 
     #[test]
