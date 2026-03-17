@@ -754,9 +754,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.56"
+version = "1.2.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aebf35691d1bfb0ac386a69bac2fde4dd276fb618cf8bf4f5318fe285e821bb2"
+checksum = "7a0dd1ca384932ff3641c8718a02769f1698e7563dc6974ffd03346116310423"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -6721,9 +6721,9 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-angelscript"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c0d1ae69208826217ee8f770b85dc91d2eb2bc7844edc8eb548e2c0408e898b"
+checksum = "50034c43309afa41177b5de106fdb159a588611dd065a6076bf97d11c0584e15"
 dependencies = [
  "cc",
  "tree-sitter-language",

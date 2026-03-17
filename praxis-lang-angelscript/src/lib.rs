@@ -6,20 +6,29 @@ use tree_sitter::{Parser, Query, QueryCursor, StreamingIterator};
 
 const ANGELSCRIPT_SYMBOLS_QUERY: &str = r#"
 (class_declaration
-  (identifier) @name) @class
+  name: (identifier) @name) @class
 
 (interface_declaration
-  (identifier) @name) @interface
+  name: (identifier) @name) @interface
 
 (enum_declaration
-  (identifier) @name) @enum_decl
+  name: (identifier) @name) @enum_decl
 
 (func_declaration
-  (identifier) @name) @func
+  name: (identifier) @name) @func
 
 (namespace_declaration
-  (scoped_identifier
+  name: (scoped_identifier
     (identifier) @name)) @namespace
+
+(mixin_declaration
+  name: (identifier) @name) @mixin
+
+(typedef_declaration
+  name: (identifier) @name) @typedef
+
+(funcdef_declaration
+  name: (identifier) @name) @funcdef
 "#;
 
 pub struct AngelScriptAnalyzer;
@@ -69,6 +78,9 @@ impl LanguageAnalyzer for AngelScriptAnalyzer {
                 2 => (SymbolKind::Enum, "enum_decl"),
                 3 => (SymbolKind::Function, "func"),
                 4 => (SymbolKind::Module, "namespace"),
+                5 => (SymbolKind::Class, "mixin"),
+                6 => (SymbolKind::TypeAlias, "typedef"),
+                7 => (SymbolKind::TypeAlias, "funcdef"),
                 _ => continue,
             };
 
@@ -302,6 +314,51 @@ mod tests {
             }
         }
         assert!(has_namespace);
+    }
+
+    #[test]
+    fn extracts_mixin() {
+        let file = make_file("mixin class MyMixin {\n  void helper() {}\n}\n");
+        let analyzer = AngelScriptAnalyzer::new();
+        let symbols = analyzer.extract_symbols(&file);
+
+        let mut has_mixin = false;
+        for sym in &symbols {
+            if sym.kind == SymbolKind::Class && sym.name == "MyMixin" {
+                has_mixin = true;
+            }
+        }
+        assert!(has_mixin);
+    }
+
+    #[test]
+    fn extracts_typedef() {
+        let file = make_file("typedef float real;\n");
+        let analyzer = AngelScriptAnalyzer::new();
+        let symbols = analyzer.extract_symbols(&file);
+
+        let mut has_typedef = false;
+        for sym in &symbols {
+            if sym.kind == SymbolKind::TypeAlias && sym.name == "real" {
+                has_typedef = true;
+            }
+        }
+        assert!(has_typedef);
+    }
+
+    #[test]
+    fn extracts_funcdef() {
+        let file = make_file("funcdef void Callback();\n");
+        let analyzer = AngelScriptAnalyzer::new();
+        let symbols = analyzer.extract_symbols(&file);
+
+        let mut has_funcdef = false;
+        for sym in &symbols {
+            if sym.kind == SymbolKind::TypeAlias && sym.name == "Callback" {
+                has_funcdef = true;
+            }
+        }
+        assert!(has_funcdef);
     }
 
     #[test]
