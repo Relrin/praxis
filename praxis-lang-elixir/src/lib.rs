@@ -21,10 +21,16 @@ const ELIXIR_SYMBOLS_QUERY: &str = r#"
   target: (identifier) @call_name
   (arguments
     (identifier) @bare_name)) @bare_def
+
+(call
+  target: (identifier) @call_name
+  (arguments
+    (list) @struct_body)) @struct_def
 "#;
 
 const DEF_KEYWORDS: &[&str] = &["def", "defp", "defmacro", "defmacrop"];
 const MODULE_KEYWORDS: &[&str] = &["defmodule", "defprotocol", "defimpl"];
+const STRUCT_KEYWORDS: &[&str] = &["defstruct"];
 
 pub struct ElixirAnalyzer {
     dep_re: Regex,
@@ -185,6 +191,37 @@ impl LanguageAnalyzer for ElixirAnalyzer {
                         signature: first_line(node, source),
                     });
                 }
+                3 => {
+                    // defstruct with list body
+                    let Some(call_cap) = find_capture(m, &query, "call_name") else {
+                        continue;
+                    };
+                    let call_name = node_text(call_cap.node, source);
+
+                    if !STRUCT_KEYWORDS.contains(&call_name.as_str()) {
+                        continue;
+                    }
+
+                    let Some(node_cap) = find_capture(m, &query, "struct_def") else {
+                        continue;
+                    };
+
+                    let node = node_cap.node;
+
+                    // Walk up to find enclosing defmodule alias name
+                    let name = find_enclosing_module_name(node, source)
+                        .unwrap_or_else(|| "defstruct".to_string());
+
+                    symbols.push(Symbol {
+                        name,
+                        kind: SymbolKind::Struct,
+                        file: file.path.clone(),
+                        visibility: Some(Visibility::Public),
+                        start_line: node.start_position().row + 1,
+                        end_line: node.end_position().row + 1,
+                        signature: first_line(node, source),
+                    });
+                }
                 _ => {}
             }
         }
@@ -274,6 +311,35 @@ impl LanguageAnalyzer for ElixirAnalyzer {
 
         Some(summary)
     }
+}
+
+fn find_enclosing_module_name(node: tree_sitter::Node, source: &[u8]) -> Option<String> {
+    let mut current = node.parent();
+    while let Some(n) = current {
+        if n.kind() == "call" {
+            // Check if the first child identifier is "defmodule"
+            let mut cursor = n.walk();
+            let children: Vec<_> = n.children(&mut cursor).collect();
+            let is_defmodule = children
+                .iter()
+                .any(|c| c.kind() == "identifier" && node_text(*c, source) == "defmodule");
+            if is_defmodule {
+                // Find the alias in arguments
+                for child in &children {
+                    if child.kind() == "arguments" {
+                        let mut ac = child.walk();
+                        for arg in child.children(&mut ac) {
+                            if arg.kind() == "alias" {
+                                return Some(node_text(arg, source));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        current = n.parent();
+    }
+    None
 }
 
 fn elixir_visibility(call_name: &str) -> Visibility {
@@ -382,6 +448,23 @@ mod tests {
             }
         }
         assert!(has_protocol);
+    }
+
+    #[test]
+    fn extracts_defstruct() {
+        let file = make_file(
+            "defmodule MyApp.User do\n  defstruct [:name, :email, :age]\nend\n",
+        );
+        let analyzer = ElixirAnalyzer::new();
+        let symbols = analyzer.extract_symbols(&file);
+
+        let mut has_struct = false;
+        for sym in &symbols {
+            if sym.kind == SymbolKind::Struct && sym.name == "MyApp.User" {
+                has_struct = true;
+            }
+        }
+        assert!(has_struct, "Expected struct symbol, got: {:?}", symbols.iter().map(|s| (&s.name, &s.kind)).collect::<Vec<_>>());
     }
 
     #[test]

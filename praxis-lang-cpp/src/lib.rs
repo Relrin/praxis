@@ -30,6 +30,16 @@ const CPP_SYMBOLS_QUERY: &str = r#"
 
 (alias_declaration
   (type_identifier) @name) @alias
+
+(field_declaration_list
+  (function_definition
+    (function_declarator
+      (field_identifier) @name))) @member_func
+
+(field_declaration_list
+  (declaration
+    (function_declarator
+      (field_identifier) @name))) @member_decl
 "#;
 
 pub struct CppAnalyzer;
@@ -75,13 +85,15 @@ impl LanguageAnalyzer for CppAnalyzer {
         while let Some(m) = matches.next() {
             let (kind, node_capture) = match m.pattern_index {
                 0 => (SymbolKind::Function, "func"),
-                1 => (SymbolKind::Function, "qualified_func"),
+                1 => (SymbolKind::Method, "qualified_func"),
                 2 => (SymbolKind::Class, "class"),
                 3 => (SymbolKind::Struct, "struct"),
                 4 => (SymbolKind::Enum, "enum_decl"),
                 5 => (SymbolKind::Module, "namespace"),
                 6 => (SymbolKind::TypeAlias, "typedef"),
                 7 => (SymbolKind::TypeAlias, "alias"),
+                8 => (SymbolKind::Method, "member_func"),
+                9 => (SymbolKind::Method, "member_decl"),
                 _ => continue,
             };
 
@@ -350,6 +362,42 @@ mod tests {
             }
         }
         assert!(has_alias);
+    }
+
+    #[test]
+    fn extracts_qualified_method() {
+        let file = make_file(
+            "method.cpp",
+            "void MyClass::doWork(int x) {\n  // body\n}\n",
+        );
+        let analyzer = CppAnalyzer::new();
+        let symbols = analyzer.extract_symbols(&file);
+
+        let mut has_method = false;
+        for sym in &symbols {
+            if sym.kind == SymbolKind::Method && sym.name == "MyClass::doWork" {
+                has_method = true;
+            }
+        }
+        assert!(has_method);
+    }
+
+    #[test]
+    fn extracts_inline_method() {
+        let file = make_file(
+            "server.hpp",
+            "class Server {\npublic:\n  void start() {}\n  int getPort() { return 0; }\n};\n",
+        );
+        let analyzer = CppAnalyzer::new();
+        let symbols = analyzer.extract_symbols(&file);
+
+        let methods: Vec<_> = symbols
+            .iter()
+            .filter(|s| s.kind == SymbolKind::Method)
+            .collect();
+        assert_eq!(methods.len(), 2);
+        assert!(methods.iter().any(|s| s.name == "start"));
+        assert!(methods.iter().any(|s| s.name == "getPort"));
     }
 
     #[test]

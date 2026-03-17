@@ -29,6 +29,14 @@ const ANGELSCRIPT_SYMBOLS_QUERY: &str = r#"
 
 (funcdef_declaration
   name: (identifier) @name) @funcdef
+
+(class_body
+  (func_declaration
+    (identifier) @name)) @method
+
+(interface_body
+  (interface_method
+    (identifier) @name)) @imethod
 "#;
 
 pub struct AngelScriptAnalyzer;
@@ -81,6 +89,8 @@ impl LanguageAnalyzer for AngelScriptAnalyzer {
                 5 => (SymbolKind::Class, "mixin"),
                 6 => (SymbolKind::TypeAlias, "typedef"),
                 7 => (SymbolKind::TypeAlias, "funcdef"),
+                8 => (SymbolKind::Method, "method"),
+                9 => (SymbolKind::Method, "imethod"),
                 _ => continue,
             };
 
@@ -359,6 +369,28 @@ mod tests {
             }
         }
         assert!(has_funcdef);
+    }
+
+    #[test]
+    fn extracts_method_in_class() {
+        let file = make_file("class Player {\n  void update() {}\n  int getHealth() { return 0; }\n}\n");
+        let analyzer = AngelScriptAnalyzer::new();
+        let symbols = analyzer.extract_symbols(&file);
+
+        let methods: Vec<_> = symbols.iter().filter(|s| s.kind == SymbolKind::Method).collect();
+        assert_eq!(methods.len(), 2);
+        assert!(methods.iter().any(|s| s.name == "update"));
+        assert!(methods.iter().any(|s| s.name == "getHealth"));
+    }
+
+    #[test]
+    fn extracts_method_in_interface() {
+        let file = make_file("interface IRenderable {\n  void render();\n}\n");
+        let analyzer = AngelScriptAnalyzer::new();
+        let symbols = analyzer.extract_symbols(&file);
+
+        let methods: Vec<_> = symbols.iter().filter(|s| s.kind == SymbolKind::Method).collect();
+        assert!(methods.iter().any(|s| s.name == "render"));
     }
 
     #[test]
