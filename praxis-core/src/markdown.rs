@@ -21,9 +21,6 @@ pub fn render_markdown(bundle: &ContextBundle) -> String {
     out.push_str("```\n\n");
     out.push_str("---\n\n");
 
-    render_token_budget(&mut out, bundle);
-    out.push_str("---\n\n");
-
     render_relevant_files(&mut out, bundle);
     out.push_str("---\n\n");
 
@@ -100,6 +97,7 @@ fn render_conversation_memory(out: &mut String, memory: &crate::types::Conversat
     }
 }
 
+#[allow(dead_code)]
 fn render_token_budget(out: &mut String, bundle: &ContextBundle) {
     let tb = &bundle.token_budget;
 
@@ -118,10 +116,56 @@ fn render_token_budget(out: &mut String, bundle: &ContextBundle) {
     out.push('\n');
 }
 
+/// Maps a file extension to a markdown code fence language identifier.
+fn ext_to_lang(path: &str) -> &'static str {
+    let ext = path.rsplit('.').next().unwrap_or("");
+    match ext {
+        "rs" => "rust",
+        "ts" | "tsx" => "typescript",
+        "js" | "jsx" => "javascript",
+        "py" => "python",
+        "go" => "go",
+        "ex" | "exs" => "elixir",
+        "cpp" | "cc" | "cxx" | "h" | "hpp" => "cpp",
+        "toml" => "toml",
+        "json" => "json",
+        "yaml" | "yml" => "yaml",
+        "md" => "markdown",
+        "scss" => "scss",
+        "css" => "css",
+        "html" => "html",
+        "sh" | "bash" => "bash",
+        "sql" => "sql",
+        "xml" => "xml",
+        "java" => "java",
+        "rb" => "ruby",
+        "as" => "angelscript",
+        _ => "",
+    }
+}
+
+/// Score threshold separating primary from supporting context.
+const PRIMARY_SCORE_THRESHOLD: f64 = 0.4;
+
 fn render_relevant_files(out: &mut String, bundle: &ContextBundle) {
+    use crate::inclusion::InclusionMode;
+
     out.push_str("## Relevant Files\n\n");
 
+    let mut in_supporting = false;
+
     for file in &bundle.relevant_files {
+        // Skip files that were skipped by the budget allocator
+        if file.inclusion_mode == InclusionMode::Skipped {
+            continue;
+        }
+
+        // Insert a tier separator when crossing the threshold
+        if !in_supporting && file.relevance_score < PRIMARY_SCORE_THRESHOLD {
+            in_supporting = true;
+            out.push_str("### Supporting Context\n\n");
+        }
+
         out.push_str(&format!(
             "### `{}` (score: {:.4})\n",
             file.path, file.relevance_score
@@ -132,7 +176,8 @@ fn render_relevant_files(out: &mut String, bundle: &ContextBundle) {
         ));
 
         if let Some(content) = &file.content {
-            out.push_str("```\n");
+            let lang = ext_to_lang(&file.path);
+            out.push_str(&format!("```{lang}\n"));
             out.push_str(content);
             if !content.ends_with('\n') {
                 out.push('\n');
@@ -304,10 +349,9 @@ mod tests {
     }
 
     #[test]
-    fn markdown_contains_token_budget_table() {
+    fn markdown_omits_token_budget_table() {
         let md = render_markdown(&minimal_bundle());
-        assert!(md.contains("| Declared | 8000 |"));
-        assert!(md.contains("| Code | 6157 |"));
+        assert!(!md.contains("## Token Budget"));
     }
 
     #[test]
@@ -316,6 +360,12 @@ mod tests {
         assert!(md.contains("### `src/main.rs` (score: 0.9100)"));
         assert!(md.contains("> Mode: full | Tokens: 3"));
         assert!(md.contains("fn main() {}"));
+    }
+
+    #[test]
+    fn markdown_uses_language_hints_in_code_fences() {
+        let md = render_markdown(&minimal_bundle());
+        assert!(md.contains("```rust\n"));
     }
 
     #[test]
@@ -374,5 +424,38 @@ mod tests {
         let md = render_markdown(&minimal_bundle());
         assert!(!md.contains("### Structs"));
         assert!(!md.contains("### Classes"));
+    }
+
+    #[test]
+    fn markdown_omits_skipped_files() {
+        let mut bundle = minimal_bundle();
+        bundle.relevant_files.push(RelevantFile {
+            path: "src/skipped.rs".to_string(),
+            inclusion_mode: InclusionMode::Skipped,
+            content: None,
+            signatures: None,
+            summary: None,
+            relevance_score: 0.1,
+            estimated_tokens: 0,
+        });
+        let md = render_markdown(&bundle);
+        assert!(!md.contains("src/skipped.rs"));
+    }
+
+    #[test]
+    fn markdown_shows_supporting_context_separator() {
+        let mut bundle = minimal_bundle();
+        // Add a low-score file
+        bundle.relevant_files.push(RelevantFile {
+            path: "src/utils.rs".to_string(),
+            inclusion_mode: InclusionMode::SummaryOnly,
+            content: None,
+            signatures: None,
+            summary: Some("utility helpers".to_string()),
+            relevance_score: 0.2,
+            estimated_tokens: 4,
+        });
+        let md = render_markdown(&bundle);
+        assert!(md.contains("### Supporting Context"));
     }
 }

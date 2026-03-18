@@ -283,10 +283,11 @@ pub fn execute(args: BuildArgs) -> Result<()> {
 
     let repo_summary = build_repo_summary(&index.files, &plugins);
 
-    let file_paths: Vec<String> = index
-        .files
+    // Only include paths of files that made it into the context (non-skipped, non-zero-score)
+    let file_paths: Vec<String> = included
         .iter()
-        .map(|f| f.path.to_string_lossy().replace('\\', "/"))
+        .filter(|f| f.mode != InclusionMode::Skipped && f.score > 0.0)
+        .map(|f| f.path.clone())
         .collect();
 
     let repo_name = args

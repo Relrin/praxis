@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
@@ -83,8 +85,16 @@ pub fn build_context_bundle(
     budget: &TokenBudget,
 ) -> ContextBundle {
     let relevant_files = build_relevant_files(included_files);
-    let symbol_graph = build_symbol_graph(symbols);
-    let dependency_graph = build_dependency_graph(dependencies);
+
+    // Collect paths of files that are actually included (non-skipped, non-zero-score)
+    let included_paths: HashSet<String> = included_files
+        .iter()
+        .filter(|f| f.mode != InclusionMode::Skipped && f.score > 0.0)
+        .map(|f| f.path.clone())
+        .collect();
+
+    let symbol_graph = build_symbol_graph(symbols, &included_paths);
+    let dependency_graph = build_dependency_graph(dependencies, included_files);
 
     let mut warnings = Vec::new();
     if budget.overflow {
@@ -128,6 +138,10 @@ pub fn build_context_bundle(
 fn build_relevant_files(included_files: &[IncludedFile]) -> Vec<RelevantFile> {
     let mut result = Vec::new();
     for file in included_files {
+        // Skip zero-score files — they provide no signal
+        if file.score == 0.0 {
+            continue;
+        }
         result.push(RelevantFile {
             path: file.path.clone(),
             inclusion_mode: file.mode,
@@ -141,7 +155,7 @@ fn build_relevant_files(included_files: &[IncludedFile]) -> Vec<RelevantFile> {
     result
 }
 
-fn build_symbol_graph(symbols: &[Symbol]) -> SymbolGraph {
+fn build_symbol_graph(symbols: &[Symbol], included_paths: &HashSet<String>) -> SymbolGraph {
     let mut groups: IndexMap<&str, Vec<SymbolEntry>> = IndexMap::new();
     for key in &[
         "functions",
@@ -158,9 +172,16 @@ fn build_symbol_graph(symbols: &[Symbol]) -> SymbolGraph {
     }
 
     for sym in symbols {
+        let file_path = sym.file.to_string_lossy().replace('\\', "/");
+
+        // Only include symbols from files that made it into the context
+        if !included_paths.contains(&file_path) {
+            continue;
+        }
+
         let entry = SymbolEntry {
             name: sym.name.clone(),
-            file: sym.file.to_string_lossy().replace('\\', "/"),
+            file: file_path,
             visibility: sym.visibility.as_ref().map(|v| v.to_string()),
             signature: sym.signature.clone(),
         };
@@ -204,14 +225,30 @@ fn build_symbol_graph(symbols: &[Symbol]) -> SymbolGraph {
     }
 }
 
-fn build_dependency_graph(dependencies: &[Dependency]) -> Vec<DependencyEntry> {
+fn build_dependency_graph(
+    dependencies: &[Dependency],
+    included_files: &[IncludedFile],
+) -> Vec<DependencyEntry> {
+    // Collect content of all included (non-skipped) files for dependency matching
+    let included_contents: Vec<&str> = included_files
+        .iter()
+        .filter(|f| f.mode != InclusionMode::Skipped && f.score > 0.0)
+        .filter_map(|f| f.content.as_deref())
+        .collect();
+
     let mut result = Vec::new();
     for dep in dependencies {
-        result.push(DependencyEntry {
-            name: dep.name.clone(),
-            version: dep.version.clone(),
-            features: dep.features.clone(),
-        });
+        let dep_lower = dep.name.to_lowercase();
+        let referenced = included_contents
+            .iter()
+            .any(|content| content.to_lowercase().contains(&dep_lower));
+        if referenced {
+            result.push(DependencyEntry {
+                name: dep.name.clone(),
+                version: dep.version.clone(),
+                features: dep.features.clone(),
+            });
+        }
     }
     result
 }

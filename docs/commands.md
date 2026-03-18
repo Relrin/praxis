@@ -21,11 +21,11 @@ Build a context bundle from a repository.
 | `--vector` | bool | `false` | Enable vector-enhanced scoring (requires `vector` feature) |
 | `--vector-weight` | float | `0.30` | Weight for vector similarity in hybrid score (0.0-1.0) |
 
-### New in Phase 3: --vector
+### --vector flag
 
 When `--vector` is provided, praxis runs incremental vector indexing and blends semantic similarity with deterministic scores. See [vector-indexing.md](vector-indexing.md) for details.
 
-### New in Phase 2: --conversation
+### --conversation flag
 
 When `--conversation` is provided, praxis:
 1. Extracts structured memory (constraints, decisions, open questions, stage markers)
