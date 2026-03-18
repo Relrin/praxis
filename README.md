@@ -15,6 +15,7 @@ The CLI tool does few things:
 
 ## Features
 - **Multi-signal relevance scoring** - combines keyword overlap, symbol matching, git recency, and dependency analysis to rank files
+- **Focused inclusion** - instead of including entire files, extracts only task-relevant line ranges (based on symbol overlap with the task description)
 - **Token budget management** - soft mode (with safety buffer) or strict mode (hard cap), with automatic allocation across task, code, memory, and metadata
 - **7 language analyzers** - Rust, Python, TypeScript/JavaScript, Go, C++, Elixir, AngelScript. For each supported language the tool extracts functions, classes, structs, traits, and other symbols
 - **Conversation memory** - extract structured context (constraints, decisions, open questions) from chat logs and fold it into the bundle
@@ -179,6 +180,20 @@ Each file receives a relevance score from 0 to 1, computed as a weighted combina
 | Dependency match | 10% | Whether the file's project dependencies are mentioned in the task |
 
 When vector search is enabled, the deterministic score is blended with semantic similarity (default 70/30 split).
+
+### How inclusion works
+
+Once files are scored and sorted, the allocator walks them in descending score order and assigns each file the best inclusion mode that fits the remaining budget:
+
+| Mode | What's included | When it's chosen |
+|------|----------------|------------------|
+| **Full** | Entire file content | File fits within remaining budget |
+| **Focused** | Only task-relevant line ranges (imports + matching symbols with context padding) | Full doesn't fit, but relevant ranges use <80% of full cost |
+| **Signature** | Function/struct/class signatures with line numbers | Focused doesn't fit or isn't worth the cost |
+| **Summary** | One-line description of the file | Signatures don't fit |
+| **Skipped** | Nothing | No budget left |
+
+Focused mode determines relevant ranges by matching extracted symbol names against task tokens. Each matching symbol contributes its line range, ranges are merged with context padding (5 lines), and the first ~10 lines (imports/declarations) are always included.
 
 For full CLI reference, see [`docs/commands.md`](docs/commands.md). For vector search configuration, see [`docs/vector-indexing.md`](docs/vector-indexing.md).
 

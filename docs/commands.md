@@ -21,6 +21,18 @@ Build a context bundle from a repository.
 | `--vector` | bool | `false` | Enable vector-enhanced scoring (requires `vector` feature) |
 | `--vector-weight` | float | `0.30` | Weight for vector similarity in hybrid score (0.0-1.0) |
 
+### Inclusion cascade
+
+Files are allocated into one of five inclusion modes, tried in order until one fits the remaining budget:
+
+1. **Full** — entire file content
+2. **Focused** — only task-relevant line ranges (imports + symbols matching the task description, with context padding). Falls back to the next level if the focused cost is ≥80% of full cost (not worth the gaps). Output includes `// Lines N-M` headers and `// ...` gap markers between ranges.
+3. **Signature** — function, struct, and class signatures with line numbers (e.g. `fn score_file(...) -> f64 (lines 42-108)`)
+4. **Summary** — a one-line description of the file
+5. **Skipped** — excluded from the bundle
+
+The symbol graph only includes symbols from files at summary or skipped level — files at full, focused, or signature level already expose their symbols directly.
+
 ### --vector flag
 
 When `--vector` is provided, praxis runs incremental vector indexing and blends semantic similarity with deterministic scores. See [vector-indexing.md](vector-indexing.md) for details.
@@ -126,7 +138,7 @@ praxis diff --token-budget 4000 --strict
 
 ## praxis inspect
 
-Inspect an existing bundle with a human-readable audit.
+Inspect an existing bundle with a human-readable audit. The audit shows file counts by inclusion mode (full, focused, signature, summary, skipped), token usage, and dependency information.
 
 ### Flags
 
