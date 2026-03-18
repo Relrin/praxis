@@ -102,3 +102,35 @@ pub struct IndexStats {
     pub symbols_embedded: usize,
     pub elapsed_secs: f64,
 }
+
+/// Events emitted during indexing to report progress.
+#[derive(Debug, Clone)]
+pub enum ProgressEvent {
+    /// Change detection complete.
+    ChangeDetected {
+        changed: usize,
+        removed: usize,
+        unchanged: usize,
+    },
+    /// A file has been chunked and prepared for embedding.
+    FilePrepared {
+        file_index: usize,
+        total_files: usize,
+    },
+    /// An embedding batch has been processed.
+    EmbeddingBatch {
+        batch_index: usize,
+        total_batches: usize,
+        kind: EmbedKind,
+    },
+}
+
+/// The kind of embedding being processed.
+#[derive(Debug, Clone, Copy)]
+pub enum EmbedKind {
+    Chunk,
+    Symbol,
+}
+
+/// Callback type for receiving indexing progress events.
+pub type ProgressCallback<'a> = &'a dyn Fn(ProgressEvent);

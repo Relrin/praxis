@@ -11,7 +11,10 @@ use crate::chunker::chunk_file;
 use crate::config::VectorConfig;
 use crate::db::VectorDb;
 use crate::embedder::Embedder;
-use crate::types::{FileChunk, FileState, IndexStats, SymbolRecord, VectorScore};
+use crate::types::{
+    EmbedKind, FileChunk, FileState, IndexStats, ProgressCallback, ProgressEvent, SymbolRecord,
+    VectorScore,
+};
 
 /// Batch size for embedding calls. ONNX runtime parallelizes internally
 /// within each batch call, so we process batches sequentially.
@@ -49,18 +52,25 @@ impl VectorIndexer {
         &self,
         files: &[FileEntry],
         symbols: &[Symbol],
+        progress: ProgressCallback,
     ) -> Result<IndexStats> {
         let start = Instant::now();
 
         self.db.reset_tables().context("failed to reset tables")?;
 
-        let (chunks, symbol_records, file_states) = self.prepare_all(files, symbols)?;
+        progress(ProgressEvent::ChangeDetected {
+            changed: files.len(),
+            removed: 0,
+            unchanged: 0,
+        });
+
+        let (chunks, symbol_records, file_states) = self.prepare_all(files, symbols, progress)?;
 
         let chunks_count = chunks.len();
         let symbols_count = symbol_records.len();
 
-        self.embed_and_store_chunks(&chunks)?;
-        self.embed_and_store_symbols(&symbol_records)?;
+        self.embed_and_store_chunks(&chunks, progress)?;
+        self.embed_and_store_symbols(&symbol_records, progress)?;
         self.db.save_file_states(&file_states)?;
 
         Ok(IndexStats {
@@ -78,6 +88,7 @@ impl VectorIndexer {
         &self,
         files: &[FileEntry],
         symbols: &[Symbol],
+        progress: ProgressCallback,
     ) -> Result<IndexStats> {
         let start = Instant::now();
 
@@ -97,6 +108,12 @@ impl VectorIndexer {
             .collect();
 
         let manifest = detect_changes(&current_files, &stored_states);
+
+        progress(ProgressEvent::ChangeDetected {
+            changed: manifest.changed.len(),
+            removed: manifest.removed.len(),
+            unchanged: manifest.unchanged.len(),
+        });
 
         // Delete removed and changed files from the index
         let mut to_delete: Vec<String> = manifest.removed.clone();
@@ -125,13 +142,13 @@ impl VectorIndexer {
             .collect();
 
         let (chunks, symbol_records, file_states) =
-            self.prepare_selected(&changed_files, &changed_symbols)?;
+            self.prepare_selected(&changed_files, &changed_symbols, progress)?;
 
         let chunks_count = chunks.len();
         let symbols_count = symbol_records.len();
 
-        self.embed_and_store_chunks(&chunks)?;
-        self.embed_and_store_symbols(&symbol_records)?;
+        self.embed_and_store_chunks(&chunks, progress)?;
+        self.embed_and_store_symbols(&symbol_records, progress)?;
         self.db.save_file_states(&file_states)?;
 
         Ok(IndexStats {
@@ -209,10 +226,11 @@ impl VectorIndexer {
         &self,
         files: &[FileEntry],
         symbols: &[Symbol],
+        progress: ProgressCallback,
     ) -> Result<(Vec<FileChunk>, Vec<SymbolRecord>, Vec<FileState>)> {
         let file_refs: Vec<&FileEntry> = files.iter().collect();
         let sym_refs: Vec<&Symbol> = symbols.iter().collect();
-        self.prepare_selected(&file_refs, &sym_refs)
+        self.prepare_selected(&file_refs, &sym_refs, progress)
     }
 
     /// Prepares chunks, symbol records, and file states for selected files.
@@ -220,6 +238,7 @@ impl VectorIndexer {
         &self,
         files: &[&FileEntry],
         symbols: &[&Symbol],
+        progress: ProgressCallback,
     ) -> Result<(Vec<FileChunk>, Vec<SymbolRecord>, Vec<FileState>)> {
         let mut all_chunks = Vec::new();
         let mut all_symbols = Vec::new();
@@ -232,7 +251,8 @@ impl VectorIndexer {
             symbols_by_file.entry(path).or_default().push(sym);
         }
 
-        for file in files {
+        let total_files = files.len();
+        for (i, file) in files.iter().enumerate() {
             let path = file.path.to_string_lossy().replace('\\', "/");
 
             // Chunk the file
@@ -272,6 +292,11 @@ impl VectorIndexer {
 
             all_chunks.extend(chunks);
             all_symbols.extend(sym_records);
+
+            progress(ProgressEvent::FilePrepared {
+                file_index: i + 1,
+                total_files,
+            });
         }
 
         Ok((all_chunks, all_symbols, file_states))
@@ -281,21 +306,28 @@ impl VectorIndexer {
     ///
     /// ONNX runtime parallelizes inference internally within each batch call,
     /// so we process batches sequentially to avoid contention.
-    fn embed_and_store_chunks(&self, chunks: &[FileChunk]) -> Result<()> {
+    fn embed_and_store_chunks(&self, chunks: &[FileChunk], progress: ProgressCallback) -> Result<()> {
         if chunks.is_empty() {
             return Ok(());
         }
 
         let texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
+        let total_batches = (texts.len() + EMBED_BATCH_SIZE - 1) / EMBED_BATCH_SIZE;
         let mut all_embeddings = Vec::with_capacity(texts.len());
 
-        for batch in texts.chunks(EMBED_BATCH_SIZE) {
+        for (i, batch) in texts.chunks(EMBED_BATCH_SIZE).enumerate() {
             let batch_vec: Vec<String> = batch.to_vec();
             let embeddings = self
                 .embedder
                 .embed_batch(&batch_vec)
                 .context("chunk embedding failed")?;
             all_embeddings.extend(embeddings);
+
+            progress(ProgressEvent::EmbeddingBatch {
+                batch_index: i + 1,
+                total_batches,
+                kind: EmbedKind::Chunk,
+            });
         }
 
         self.db.insert_chunks(chunks, &all_embeddings)?;
@@ -303,21 +335,28 @@ impl VectorIndexer {
     }
 
     /// Embeds symbol records in batches and stores them in LanceDB.
-    fn embed_and_store_symbols(&self, symbols: &[SymbolRecord]) -> Result<()> {
+    fn embed_and_store_symbols(&self, symbols: &[SymbolRecord], progress: ProgressCallback) -> Result<()> {
         if symbols.is_empty() {
             return Ok(());
         }
 
         let texts: Vec<String> = symbols.iter().map(|s| s.embed_text.clone()).collect();
+        let total_batches = (texts.len() + EMBED_BATCH_SIZE - 1) / EMBED_BATCH_SIZE;
         let mut all_embeddings = Vec::with_capacity(texts.len());
 
-        for batch in texts.chunks(EMBED_BATCH_SIZE) {
+        for (i, batch) in texts.chunks(EMBED_BATCH_SIZE).enumerate() {
             let batch_vec: Vec<String> = batch.to_vec();
             let embeddings = self
                 .embedder
                 .embed_batch(&batch_vec)
                 .context("symbol embedding failed")?;
             all_embeddings.extend(embeddings);
+
+            progress(ProgressEvent::EmbeddingBatch {
+                batch_index: i + 1,
+                total_batches,
+                kind: EmbedKind::Symbol,
+            });
         }
 
         self.db.insert_symbols(symbols, &all_embeddings)?;

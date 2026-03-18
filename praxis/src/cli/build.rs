@@ -132,6 +132,9 @@ pub fn execute(args: BuildArgs) -> Result<()> {
 
     #[cfg(feature = "vector")]
     if use_vector {
+        use std::cell::RefCell;
+        use indicatif::{ProgressBar, ProgressStyle};
+
         let vector_config = praxis_vector::config::load_config(&args.repo)
             .context("failed to load vector config")?;
 
@@ -139,8 +142,45 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         let indexer = praxis_vector::indexer::VectorIndexer::new(&args.repo, &vector_config)
             .context("failed to create vector indexer")?;
 
+        let style = ProgressStyle::with_template("  {msg} [{bar:20}] {pos}/{len}")
+            .unwrap()
+            .progress_chars("█░░");
+
+        let chunk_bar: RefCell<Option<ProgressBar>> = RefCell::new(None);
+        let symbol_bar: RefCell<Option<ProgressBar>> = RefCell::new(None);
+
+        let progress = |event: praxis_vector::types::ProgressEvent| {
+            use praxis_vector::types::{EmbedKind, ProgressEvent};
+            if let ProgressEvent::EmbeddingBatch {
+                batch_index,
+                total_batches,
+                kind,
+            } = event
+            {
+                let bar_cell = match kind {
+                    EmbedKind::Chunk => &chunk_bar,
+                    EmbedKind::Symbol => &symbol_bar,
+                };
+                let label = match kind {
+                    EmbedKind::Chunk => "Embedding (chunks) ",
+                    EmbedKind::Symbol => "Embedding (symbols)",
+                };
+                let mut bar_ref = bar_cell.borrow_mut();
+                let bar = bar_ref.get_or_insert_with(|| {
+                    let pb = ProgressBar::new(total_batches as u64);
+                    pb.set_style(style.clone());
+                    pb.set_message(label);
+                    pb
+                });
+                bar.set_position(batch_index as u64);
+                if batch_index == total_batches {
+                    bar.finish();
+                }
+            }
+        };
+
         let stats = indexer
-            .index_incremental(&index.files, &index.symbols)
+            .index_incremental(&index.files, &index.symbols, &progress)
             .context("vector indexing failed")?;
         eprintln!(
             "  Vector index: {} indexed, {} unchanged, {} removed ({:.2}s)",
