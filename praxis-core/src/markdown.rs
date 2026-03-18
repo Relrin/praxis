@@ -1,3 +1,4 @@
+use crate::inclusion::LineRange;
 use crate::output::ContextBundle;
 
 /// Renders a [`ContextBundle`] as a Markdown string.
@@ -144,6 +145,19 @@ fn ext_to_lang(path: &str) -> &'static str {
     }
 }
 
+/// Formats line ranges for the focused-mode header.
+///
+/// Example output: `Lines: 1-12, 56-93, 159-176`
+fn format_line_ranges(ranges: Option<&[LineRange]>) -> String {
+    match ranges {
+        Some(ranges) if !ranges.is_empty() => {
+            let parts: Vec<String> = ranges.iter().map(|r| format!("{}-{}", r.start, r.end)).collect();
+            format!("Lines: {}", parts.join(", "))
+        }
+        _ => String::new(),
+    }
+}
+
 /// Score threshold separating primary from supporting context.
 const PRIMARY_SCORE_THRESHOLD: f64 = 0.4;
 
@@ -170,10 +184,20 @@ fn render_relevant_files(out: &mut String, bundle: &ContextBundle) {
             "### `{}` (score: {:.4})\n",
             file.path, file.relevance_score
         ));
-        out.push_str(&format!(
-            "> Mode: {} | Tokens: {}\n\n",
-            file.inclusion_mode, file.estimated_tokens
-        ));
+
+        // Build mode line — include line range summary for focused mode
+        if file.inclusion_mode == InclusionMode::Focused {
+            let range_summary = format_line_ranges(file.line_ranges.as_deref());
+            out.push_str(&format!(
+                "> Mode: {} | Tokens: {} | {}\n\n",
+                file.inclusion_mode, file.estimated_tokens, range_summary
+            ));
+        } else {
+            out.push_str(&format!(
+                "> Mode: {} | Tokens: {}\n\n",
+                file.inclusion_mode, file.estimated_tokens
+            ));
+        }
 
         if let Some(content) = &file.content {
             let lang = ext_to_lang(&file.path);
@@ -230,7 +254,10 @@ fn render_symbol_section(
             Some(v) => v.as_str(),
             None => "unknown",
         };
-        out.push_str(&format!("- `{}` — {} — {}\n", entry.name, entry.file, vis));
+        out.push_str(&format!(
+            "- `{}` — {} — {} (lines {}-{})\n",
+            entry.name, entry.file, vis, entry.start_line, entry.end_line
+        ));
     }
     out.push('\n');
 }
@@ -280,6 +307,7 @@ mod tests {
                     summary: None,
                     relevance_score: 0.91,
                     estimated_tokens: 3,
+                    line_ranges: None,
                 },
                 RelevantFile {
                     path: "src/lib.rs".to_string(),
@@ -289,6 +317,7 @@ mod tests {
                     summary: None,
                     relevance_score: 0.65,
                     estimated_tokens: 6,
+                    line_ranges: None,
                 },
             ],
             symbol_graph: SymbolGraph {
@@ -297,6 +326,8 @@ mod tests {
                     file: "src/main.rs".to_string(),
                     visibility: Some("public".to_string()),
                     signature: "fn main()".to_string(),
+                    start_line: 1,
+                    end_line: 3,
                 }],
                 structs: Vec::new(),
                 classes: Vec::new(),
@@ -378,7 +409,7 @@ mod tests {
     fn markdown_contains_symbol_graph() {
         let md = render_markdown(&minimal_bundle());
         assert!(md.contains("### Functions"));
-        assert!(md.contains("- `main` — src/main.rs — public"));
+        assert!(md.contains("- `main` — src/main.rs — public (lines 1-3)"));
     }
 
     #[test]
@@ -437,6 +468,7 @@ mod tests {
             summary: None,
             relevance_score: 0.1,
             estimated_tokens: 0,
+            line_ranges: None,
         });
         let md = render_markdown(&bundle);
         assert!(!md.contains("src/skipped.rs"));
@@ -454,6 +486,7 @@ mod tests {
             summary: Some("utility helpers".to_string()),
             relevance_score: 0.2,
             estimated_tokens: 4,
+            line_ranges: None,
         });
         let md = render_markdown(&bundle);
         assert!(md.contains("### Supporting Context"));

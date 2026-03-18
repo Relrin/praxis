@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -279,9 +279,17 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         &index.symbols,
         &plugins,
         budget.code,
+        &task_tokens,
     );
 
-    let repo_summary = build_repo_summary(&index.files, &plugins);
+    // Paths of files with non-zero scores (for filtering repo summary).
+    let scored_paths: HashSet<String> = scored_files
+        .iter()
+        .filter(|f| f.score > 0.0)
+        .map(|f| f.path.clone())
+        .collect();
+
+    let repo_summary = build_repo_summary(&index.files, &plugins, &scored_paths);
 
     // Only include paths of files that made it into the context (non-skipped, non-zero-score)
     let file_paths: Vec<String> = included
@@ -404,6 +412,7 @@ fn print_summary(
     bundle: &ContextBundle,
 ) {
     let mut full_count = 0;
+    let mut focused_count = 0;
     let mut sig_count = 0;
     let mut sum_count = 0;
     let mut skip_count = 0;
@@ -412,6 +421,7 @@ fn print_summary(
     for f in included {
         match f.mode {
             InclusionMode::Full => full_count += 1,
+            InclusionMode::Focused => focused_count += 1,
             InclusionMode::SignatureOnly => sig_count += 1,
             InclusionMode::SummaryOnly => sum_count += 1,
             InclusionMode::Skipped => skip_count += 1,
@@ -422,8 +432,8 @@ fn print_summary(
     eprintln!();
     eprintln!("Summary:");
     eprintln!(
-        "  Files:  {} full, {} signature, {} summary, {} skipped",
-        full_count, sig_count, sum_count, skip_count
+        "  Files:  {} full, {} focused, {} signature, {} summary, {} skipped",
+        full_count, focused_count, sig_count, sum_count, skip_count
     );
     eprintln!("  Tokens: {} / {} used", total_tokens, budget.code);
     eprintln!("  Deps:   {}", dep_count);
@@ -436,12 +446,42 @@ fn print_summary(
     }
 }
 
-fn build_repo_summary(files: &[FileEntry], plugins: &PluginRegistry) -> String {
+/// Config/manifest file names that are always kept in the repo summary
+/// regardless of task relevance.
+const ALWAYS_KEEP_FILENAMES: &[&str] = &[
+    "Cargo.toml",
+    "package.json",
+    "pyproject.toml",
+    "go.mod",
+    "Makefile",
+    "CMakeLists.txt",
+    "build.gradle",
+    "pom.xml",
+    "mix.exs",
+];
+
+fn build_repo_summary(
+    files: &[FileEntry],
+    plugins: &PluginRegistry,
+    scored_paths: &HashSet<String>,
+) -> String {
     let mut summaries = Vec::new();
 
     for file in files {
         let depth = file.path.components().count();
         if depth > 2 {
+            continue;
+        }
+
+        let posix_path = to_posix_path(&file.path);
+
+        // Filter to task-relevant files or config/manifest files.
+        let is_config = file
+            .path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map_or(false, |name| ALWAYS_KEEP_FILENAMES.contains(&name));
+        if !is_config && !scored_paths.contains(&posix_path) {
             continue;
         }
 
@@ -460,8 +500,7 @@ fn build_repo_summary(files: &[FileEntry], plugins: &PluginRegistry) -> String {
             continue;
         };
 
-        let path = to_posix_path(&file.path);
-        summaries.push(format!("- {path}: {summary}"));
+        summaries.push(format!("- {posix_path}: {summary}"));
     }
 
     if summaries.is_empty() {

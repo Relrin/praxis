@@ -60,6 +60,10 @@ pub fn render_file_tree(paths: &[String], root_name: &str) -> String {
         root.insert(&parts);
     }
 
+    // Collapse single-child directory chains (e.g. src/ -> engine/ -> File.ts
+    // becomes src/engine/ with File.ts beneath it).
+    collapse_single_child_dirs(&mut root);
+
     let mut out = String::new();
     out.push_str(root_name);
     out.push('/');
@@ -75,6 +79,38 @@ pub fn render_file_tree(paths: &[String], root_name: &str) -> String {
     }
 
     out
+}
+
+/// Collapses chains of single-child directories into combined names.
+///
+/// A directory node with exactly one child that is itself a non-file directory
+/// gets merged: `src/` → `engine/` → (children) becomes `src/engine/` → (children).
+fn collapse_single_child_dirs(node: &mut TreeNode) {
+    // Collect keys to avoid borrow issues.
+    let keys: Vec<String> = node.children.keys().cloned().collect();
+
+    for key in keys {
+        let child = node.children.get_mut(&key).unwrap();
+
+        // First recursively collapse children.
+        collapse_single_child_dirs(child);
+
+        // Then check if this child is a collapsible single-child directory.
+        if !child.is_file && child.children.len() == 1 {
+            let grandchild_name = child.children.keys().next().unwrap().clone();
+            let is_leaf_file = {
+                let gc = &child.children[&grandchild_name];
+                gc.is_file && gc.children.is_empty()
+            };
+            // Only collapse if the grandchild is also a directory (not a bare leaf file).
+            if !is_leaf_file {
+                let mut removed_child = node.children.remove(&key).unwrap();
+                let grandchild = removed_child.children.remove(&grandchild_name).unwrap();
+                let merged_name = format!("{}/{}", key, grandchild_name);
+                node.children.insert(merged_name, grandchild);
+            }
+        }
+    }
 }
 
 fn render_node(out: &mut String, node: &TreeNode, name: &str, prefix: &str, is_last: bool) {

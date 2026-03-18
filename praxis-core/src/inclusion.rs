@@ -1,9 +1,11 @@
+use std::collections::BTreeSet;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
 use crate::plugin::PluginRegistry;
 use crate::scorer::ScoredFile;
+use crate::tokenizer::tokenize_symbol;
 use crate::types::{FileEntry, Symbol};
 
 // ---------------------------------------------------------------------------
@@ -35,6 +37,10 @@ pub trait BudgetCandidate {
     /// Compute a summary truncated to fit within `max_tokens`.
     /// Returns `(token_cost, summary_text)` or `None` if unavailable.
     fn compute_summary(&self, max_tokens: usize) -> Option<(usize, String)>;
+
+    /// Compute a focused representation: only task-relevant line ranges with context padding.
+    /// Returns `(token_cost, focused_content, line_ranges)` or `None` if unavailable.
+    fn compute_focused(&self, max_tokens: usize) -> Option<(usize, String, Vec<LineRange>)>;
 }
 
 /// Result of allocating a single candidate within the budget.
@@ -45,6 +51,7 @@ pub struct AllocationResult {
     pub content: Option<String>,
     pub signatures: Option<Vec<String>>,
     pub summary: Option<String>,
+    pub line_ranges: Option<Vec<LineRange>>,
 }
 
 /// Greedy budget allocation over an ordered list of candidates.
@@ -70,6 +77,27 @@ pub fn greedy_allocate<C: BudgetCandidate>(
                     content: Some(content),
                     signatures: None,
                     summary: None,
+                    line_ranges: None,
+                });
+                continue;
+            }
+        }
+
+        // Try focused inclusion (relevant line ranges only).
+        // Skip if focused would use >80% of the full cost (not worth the gaps).
+        if let Some((focused_cost, focused_content, ranges)) =
+            candidate.compute_focused(remaining)
+        {
+            let worth_focusing = full_cost == 0 || (focused_cost as f64) < (full_cost as f64 * 0.8);
+            if worth_focusing && focused_cost > 0 && focused_cost <= remaining {
+                remaining -= focused_cost;
+                results.push(AllocationResult {
+                    mode: InclusionMode::Focused,
+                    tokens_used: focused_cost,
+                    content: Some(focused_content),
+                    signatures: None,
+                    summary: None,
+                    line_ranges: Some(ranges),
                 });
                 continue;
             }
@@ -85,6 +113,7 @@ pub fn greedy_allocate<C: BudgetCandidate>(
                     content: None,
                     signatures: Some(sigs),
                     summary: None,
+                    line_ranges: None,
                 });
                 continue;
             }
@@ -99,6 +128,7 @@ pub fn greedy_allocate<C: BudgetCandidate>(
                 content: None,
                 signatures: None,
                 summary: Some(summary),
+                line_ranges: None,
             });
             continue;
         }
@@ -110,10 +140,18 @@ pub fn greedy_allocate<C: BudgetCandidate>(
             content: None,
             signatures: None,
             summary: None,
+            line_ranges: None,
         });
     }
 
     results
+}
+
+/// A contiguous range of lines within a file (1-based, inclusive).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LineRange {
+    pub start: usize,
+    pub end: usize,
 }
 
 /// Determines how a file is included in the context bundle.
@@ -121,6 +159,7 @@ pub fn greedy_allocate<C: BudgetCandidate>(
 #[serde(rename_all = "snake_case")]
 pub enum InclusionMode {
     Full,
+    Focused,
     SignatureOnly,
     SummaryOnly,
     Skipped,
@@ -130,6 +169,7 @@ impl fmt::Display for InclusionMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
             InclusionMode::Full => "full",
+            InclusionMode::Focused => "focused",
             InclusionMode::SignatureOnly => "signature_only",
             InclusionMode::SummaryOnly => "summary_only",
             InclusionMode::Skipped => "skipped",
@@ -149,14 +189,19 @@ pub struct IncludedFile {
     pub content: Option<String>,
     pub signatures: Option<Vec<String>>,
     pub summary: Option<String>,
+    pub line_ranges: Option<Vec<LineRange>>,
 }
 
 /// Estimates the token cost of including all signatures for a file.
+///
+/// Each signature includes a line-range suffix (e.g. `fn foo() (lines 10-25)`)
+/// so that an AI agent knows where to find the implementation.
 fn signature_tokens(file: &FileEntry, symbols: &[&Symbol]) -> (usize, Vec<String>) {
     let mut sigs = Vec::new();
     for sym in symbols {
         if sym.file == file.path {
-            sigs.push(sym.signature.clone());
+            let sig = format!("{} (lines {}-{})", sym.signature, sym.start_line, sym.end_line);
+            sigs.push(sig);
         }
     }
 
@@ -240,6 +285,7 @@ struct BuildCandidate<'a> {
     file: &'a FileEntry,
     file_symbols: Vec<&'a Symbol>,
     plugins: &'a PluginRegistry,
+    task_tokens: &'a BTreeSet<String>,
 }
 
 impl<'a> BudgetCandidate for BuildCandidate<'a> {
@@ -273,6 +319,133 @@ impl<'a> BudgetCandidate for BuildCandidate<'a> {
         let cost = summary.len() / 4;
         Some((cost, summary))
     }
+
+    fn compute_focused(&self, max_tokens: usize) -> Option<(usize, String, Vec<LineRange>)> {
+        if self.file_symbols.is_empty() || self.task_tokens.is_empty() {
+            return None;
+        }
+
+        let ranges = compute_relevant_ranges(
+            &self.file.content,
+            &self.file_symbols,
+            self.task_tokens,
+        );
+
+        if ranges.is_empty() {
+            return None;
+        }
+
+        let (content, total_line_count) =
+            extract_focused_content(&self.file.content, &ranges);
+
+        if content.is_empty() || total_line_count == 0 {
+            return None;
+        }
+
+        let cost = content.len() / 4;
+        if cost > max_tokens {
+            return None;
+        }
+
+        Some((cost, content, ranges))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Focused-inclusion helpers
+// ---------------------------------------------------------------------------
+
+/// Number of context-padding lines added before and after each relevant symbol range.
+const FOCUS_PADDING: usize = 5;
+
+/// Always include the first N lines of a file (typically imports/module declarations).
+const FOCUS_IMPORT_LINES: usize = 10;
+
+/// Determines which line ranges in a file are relevant to the task.
+///
+/// For each symbol in the file, checks whether any of the symbol's tokenized
+/// name tokens overlap with `task_tokens`. Matching symbols contribute their
+/// `start_line..end_line` range. All ranges are padded, merged, and the first
+/// N lines are always included (for imports).
+fn compute_relevant_ranges(
+    content: &str,
+    symbols: &[&Symbol],
+    task_tokens: &BTreeSet<String>,
+) -> Vec<LineRange> {
+    let total_lines = content.lines().count();
+    if total_lines == 0 {
+        return Vec::new();
+    }
+
+    let mut raw_ranges: Vec<LineRange> = Vec::new();
+
+    // Always include import region (first N lines).
+    raw_ranges.push(LineRange {
+        start: 1,
+        end: FOCUS_IMPORT_LINES.min(total_lines),
+    });
+
+    // Add ranges for symbols whose names overlap with task tokens.
+    for sym in symbols {
+        let sym_tokens: BTreeSet<String> = tokenize_symbol(&sym.name).into_iter().collect();
+        let has_overlap = sym_tokens.iter().any(|t| task_tokens.contains(t));
+        if has_overlap {
+            let start = sym.start_line.saturating_sub(FOCUS_PADDING).max(1);
+            let end = (sym.end_line + FOCUS_PADDING).min(total_lines);
+            raw_ranges.push(LineRange { start, end });
+        }
+    }
+
+    if raw_ranges.is_empty() {
+        return Vec::new();
+    }
+
+    // Sort and merge overlapping/adjacent ranges.
+    raw_ranges.sort_by_key(|r| (r.start, r.end));
+    let mut merged: Vec<LineRange> = Vec::new();
+    for range in raw_ranges {
+        if let Some(last) = merged.last_mut() {
+            // Merge if overlapping or adjacent (gap <= 1 line).
+            if range.start <= last.end + 2 {
+                last.end = last.end.max(range.end);
+                continue;
+            }
+        }
+        merged.push(range);
+    }
+
+    merged
+}
+
+/// Extracts the focused content string from file content given merged line ranges.
+///
+/// Inserts `// Lines N-M` headers before each range and `// ...` between gaps.
+/// Returns `(content_string, total_lines_included)`.
+fn extract_focused_content(content: &str, ranges: &[LineRange]) -> (String, usize) {
+    let lines: Vec<&str> = content.lines().collect();
+    let total_lines = lines.len();
+    let mut out = String::new();
+    let mut included = 0usize;
+
+    for (i, range) in ranges.iter().enumerate() {
+        if i > 0 {
+            out.push_str("\n// ...\n\n");
+        }
+
+        out.push_str(&format!("// Lines {}-{}\n", range.start, range.end));
+
+        let start_idx = (range.start.saturating_sub(1)).min(total_lines);
+        let end_idx = range.end.min(total_lines);
+
+        for line in &lines[start_idx..end_idx] {
+            out.push_str(line);
+            out.push('\n');
+        }
+
+        included += end_idx - start_idx;
+    }
+
+    (out, included)
 }
 
 /// Assigns an [`InclusionMode`] to each scored file using greedy budget allocation.
@@ -286,6 +459,7 @@ pub fn assign_inclusion_modes(
     symbols: &[Symbol],
     plugins: &PluginRegistry,
     code_budget: usize,
+    task_tokens: &BTreeSet<String>,
 ) -> Vec<IncludedFile> {
     // Build candidates
     let candidates: Vec<BuildCandidate> = scored_files
@@ -301,6 +475,7 @@ pub fn assign_inclusion_modes(
                 file,
                 file_symbols,
                 plugins,
+                task_tokens,
             }
         })
         .collect();
@@ -321,6 +496,7 @@ pub fn assign_inclusion_modes(
             content: alloc.content,
             signatures: alloc.signatures,
             summary: alloc.summary,
+            line_ranges: alloc.line_ranges,
         })
         .collect()
 }
@@ -329,7 +505,12 @@ pub fn assign_inclusion_modes(
 mod tests {
     use super::*;
     use crate::types::{FileEntry, SymbolKind, Visibility};
+    use std::collections::BTreeSet;
     use std::path::PathBuf;
+
+    fn empty_tokens() -> BTreeSet<String> {
+        BTreeSet::new()
+    }
 
     fn make_file(path: &str, size: usize) -> FileEntry {
         let content = "x".repeat(size * 4);
@@ -362,7 +543,7 @@ mod tests {
         let scored = vec![make_scored("a.rs", 0.9, 0)];
         let registry = PluginRegistry::new();
 
-        let result = assign_inclusion_modes(&scored, &files, &[], &registry, 500);
+        let result = assign_inclusion_modes(&scored, &files, &[], &registry, 500, &empty_tokens());
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].mode, InclusionMode::Full);
@@ -377,7 +558,7 @@ mod tests {
         let scored = vec![make_scored("a.rs", 0.9, 0)];
         let registry = PluginRegistry::new();
 
-        let result = assign_inclusion_modes(&scored, &files, &symbols, &registry, 100);
+        let result = assign_inclusion_modes(&scored, &files, &symbols, &registry, 100, &empty_tokens());
 
         assert_eq!(result[0].mode, InclusionMode::SignatureOnly);
         assert!(result[0].signatures.is_some());
@@ -391,7 +572,7 @@ mod tests {
         let scored = vec![make_scored("a.rs", 0.9, 0)];
         let registry = PluginRegistry::new();
 
-        let result = assign_inclusion_modes(&scored, &files, &symbols, &registry, 80);
+        let result = assign_inclusion_modes(&scored, &files, &symbols, &registry, 80, &empty_tokens());
 
         assert_eq!(result[0].mode, InclusionMode::SummaryOnly);
         assert!(result[0].summary.is_some());
@@ -403,7 +584,7 @@ mod tests {
         let scored = vec![make_scored("a.rs", 0.9, 0)];
         let registry = PluginRegistry::new();
 
-        let result = assign_inclusion_modes(&scored, &files, &[], &registry, 10);
+        let result = assign_inclusion_modes(&scored, &files, &[], &registry, 10, &empty_tokens());
 
         assert_eq!(result[0].mode, InclusionMode::SummaryOnly);
         assert!(result[0].tokens_used <= 10);
@@ -417,7 +598,7 @@ mod tests {
         let scored = vec![make_scored("a.rs", 0.9, 0)];
         let registry = PluginRegistry::new();
 
-        let result = assign_inclusion_modes(&scored, &files, &symbols, &registry, 0);
+        let result = assign_inclusion_modes(&scored, &files, &symbols, &registry, 0, &empty_tokens());
 
         assert_eq!(result[0].mode, InclusionMode::Skipped);
         assert_eq!(result[0].tokens_used, 0);
@@ -437,7 +618,7 @@ mod tests {
         ];
         let registry = PluginRegistry::new();
 
-        let result = assign_inclusion_modes(&scored, &files, &[], &registry, 130);
+        let result = assign_inclusion_modes(&scored, &files, &[], &registry, 130, &empty_tokens());
 
         assert_eq!(result[0].mode, InclusionMode::Full);
         assert_eq!(result[1].mode, InclusionMode::Full);

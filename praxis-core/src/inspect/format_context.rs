@@ -32,13 +32,15 @@ pub fn format_context_bundle(bundle: &ContextBundle, verbose: bool) -> String {
     // --- Files ---
     out.push_str("Files\n");
     let full_count = count_inclusion_mode(&bundle.relevant_files, InclusionMode::Full);
+    let focused_count = count_inclusion_mode(&bundle.relevant_files, InclusionMode::Focused);
     let sig_count = count_inclusion_mode(&bundle.relevant_files, InclusionMode::SignatureOnly);
     let summary_count = count_inclusion_mode(&bundle.relevant_files, InclusionMode::SummaryOnly);
-    let included = full_count + sig_count + summary_count;
+    let included = full_count + focused_count + sig_count + summary_count;
     let skipped = bundle.relevant_files.len() - included;
 
     out.push_str(&format!("  Included:      {}\n", included));
     out.push_str(&format!("    Full:        {}\n", full_count));
+    out.push_str(&format!("    Focused:     {}\n", focused_count));
     out.push_str(&format!("    Signatures:  {}\n", sig_count));
     out.push_str(&format!("    Summaries:   {}\n", summary_count));
 
@@ -152,6 +154,7 @@ mod tests {
                     summary: None,
                     relevance_score: 0.91,
                     estimated_tokens: 3,
+                    line_ranges: None,
                 },
                 RelevantFile {
                     path: "src/lib.rs".to_string(),
@@ -161,6 +164,7 @@ mod tests {
                     summary: None,
                     relevance_score: 0.10,
                     estimated_tokens: 0,
+                    line_ranges: None,
                 },
             ],
             symbol_graph: SymbolGraph {
@@ -169,6 +173,8 @@ mod tests {
                     file: "src/main.rs".to_string(),
                     visibility: Some("public".to_string()),
                     signature: "fn main()".to_string(),
+                    start_line: 1,
+                    end_line: 3,
                 }],
                 structs: Vec::new(),
                 classes: Vec::new(),

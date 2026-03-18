@@ -32,6 +32,7 @@ pub struct TokenBudgetAudit {
 pub struct FilesAudit {
     pub included: usize,
     pub full: usize,
+    pub focused: usize,
     pub signatures: usize,
     pub summaries: usize,
     pub skipped: usize,
@@ -101,9 +102,10 @@ pub fn context_audit_json(
     warnings: Vec<String>,
 ) -> anyhow::Result<String> {
     let full = count_mode(&bundle.relevant_files, InclusionMode::Full);
+    let focused = count_mode(&bundle.relevant_files, InclusionMode::Focused);
     let sig = count_mode(&bundle.relevant_files, InclusionMode::SignatureOnly);
     let sum = count_mode(&bundle.relevant_files, InclusionMode::SummaryOnly);
-    let included = full + sig + sum;
+    let included = full + focused + sig + sum;
     let skipped = bundle.relevant_files.len() - included;
 
     let mut sorted = bundle.relevant_files.clone();
@@ -149,6 +151,7 @@ pub fn context_audit_json(
         files: FilesAudit {
             included,
             full,
+            focused,
             signatures: sig,
             summaries: sum,
             skipped,
@@ -233,6 +236,7 @@ mod tests {
                 summary: None,
                 relevance_score: 0.9,
                 estimated_tokens: 100,
+                line_ranges: None,
             }],
             symbol_graph: SymbolGraph {
                 functions: Vec::new(),

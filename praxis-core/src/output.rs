@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 // Re-exported so consumers of `output::*` get TokenBudget alongside ContextBundle.
 pub use crate::budget::TokenBudget;
-use crate::inclusion::{IncludedFile, InclusionMode};
+use crate::inclusion::{IncludedFile, InclusionMode, LineRange};
 use crate::types::{ConversationMemory, Dependency, Symbol, SymbolKind};
 
 
@@ -41,6 +41,8 @@ pub struct RelevantFile {
     pub summary: Option<String>,
     pub relevance_score: f64,
     pub estimated_tokens: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line_ranges: Option<Vec<LineRange>>,
 }
 
 /// Symbol graph organized by kind.
@@ -64,6 +66,10 @@ pub struct SymbolEntry {
     pub file: String,
     pub visibility: Option<String>,
     pub signature: String,
+    #[serde(default)]
+    pub start_line: usize,
+    #[serde(default)]
+    pub end_line: usize,
 }
 
 /// A dependency in the dependency graph.
@@ -93,7 +99,10 @@ pub fn build_context_bundle(
         .map(|f| f.path.clone())
         .collect();
 
-    let symbol_graph = build_symbol_graph(symbols, &included_paths);
+    // Only include symbols in the graph from files where content is NOT already
+    // visible (i.e. exclude Full, Focused, SignatureOnly — they're already shown).
+    let visible_paths = visible_symbol_paths(included_files);
+    let symbol_graph = build_symbol_graph(symbols, &included_paths, &visible_paths);
     let dependency_graph = build_dependency_graph(dependencies, included_files);
 
     let mut warnings = Vec::new();
@@ -150,12 +159,30 @@ fn build_relevant_files(included_files: &[IncludedFile]) -> Vec<RelevantFile> {
             summary: file.summary.clone(),
             relevance_score: file.score,
             estimated_tokens: file.tokens_used,
+            line_ranges: file.line_ranges.clone(),
         });
     }
     result
 }
 
-fn build_symbol_graph(symbols: &[Symbol], included_paths: &HashSet<String>) -> SymbolGraph {
+/// Paths of files whose symbols are already visible in the context
+/// (Full, Focused, or SignatureOnly mode). We skip these in the symbol graph
+/// to avoid redundancy.
+fn visible_symbol_paths(included_files: &[IncludedFile]) -> HashSet<String> {
+    included_files
+        .iter()
+        .filter(|f| matches!(f.mode,
+            InclusionMode::Full | InclusionMode::Focused | InclusionMode::SignatureOnly
+        ))
+        .map(|f| f.path.clone())
+        .collect()
+}
+
+fn build_symbol_graph(
+    symbols: &[Symbol],
+    included_paths: &HashSet<String>,
+    visible_paths: &HashSet<String>,
+) -> SymbolGraph {
     let mut groups: IndexMap<&str, Vec<SymbolEntry>> = IndexMap::new();
     for key in &[
         "functions",
@@ -179,11 +206,19 @@ fn build_symbol_graph(symbols: &[Symbol], included_paths: &HashSet<String>) -> S
             continue;
         }
 
+        // Skip symbols from files whose content is already visible
+        // (Full, Focused, or SignatureOnly mode) — no need to duplicate.
+        if visible_paths.contains(&file_path) {
+            continue;
+        }
+
         let entry = SymbolEntry {
             name: sym.name.clone(),
             file: file_path,
             visibility: sym.visibility.as_ref().map(|v| v.to_string()),
             signature: sym.signature.clone(),
+            start_line: sym.start_line,
+            end_line: sym.end_line,
         };
 
         let bucket = match sym.kind {

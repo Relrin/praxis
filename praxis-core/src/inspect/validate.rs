@@ -226,6 +226,7 @@ mod tests {
                 summary: None,
                 relevance_score: 0.5,
                 estimated_tokens: 10,
+                line_ranges: None,
             },
             RelevantFile {
                 path: "b.rs".to_string(),
@@ -235,6 +236,7 @@ mod tests {
                 summary: None,
                 relevance_score: 0.9,
                 estimated_tokens: 10,
+                line_ranges: None,
             },
         ];
         let warnings = validate_context_bundle(&bundle);

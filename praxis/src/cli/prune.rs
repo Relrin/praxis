@@ -5,7 +5,7 @@ use clap::Parser;
 
 use praxis_core::budget::{allocate_budget, BudgetConfig};
 use praxis_core::conversation::truncate_memory;
-use praxis_core::inclusion::{greedy_allocate, BudgetCandidate, InclusionMode};
+use praxis_core::inclusion::{greedy_allocate, BudgetCandidate, InclusionMode, LineRange};
 use praxis_core::markdown::render_markdown;
 use praxis_core::output::{serialize_json, ContextBundle, RelevantFile};
 
@@ -94,6 +94,7 @@ pub fn execute(args: PruneArgs) -> Result<()> {
             summary: alloc.summary.clone(),
             relevance_score: file.relevance_score,
             estimated_tokens: alloc.tokens_used,
+            line_ranges: alloc.line_ranges.clone(),
         });
     }
 
@@ -121,6 +122,11 @@ pub fn execute(args: PruneArgs) -> Result<()> {
         .iter()
         .filter(|f| f.inclusion_mode == InclusionMode::Full)
         .count();
+    let focused_count = bundle
+        .relevant_files
+        .iter()
+        .filter(|f| f.inclusion_mode == InclusionMode::Focused)
+        .count();
     let sig_count = bundle
         .relevant_files
         .iter()
@@ -138,8 +144,8 @@ pub fn execute(args: PruneArgs) -> Result<()> {
         .count();
 
     eprintln!(
-        "Pruned: {} full, {} signature, {} summary, {} skipped",
-        full_count, sig_count, sum_count, skip_count
+        "Pruned: {} full, {} focused, {} signature, {} summary, {} skipped",
+        full_count, focused_count, sig_count, sum_count, skip_count
     );
 
     Ok(())
@@ -213,5 +219,10 @@ impl BudgetCandidate for PruneCandidate<'_> {
                 None
             }
         })
+    }
+
+    fn compute_focused(&self, _max_tokens: usize) -> Option<(usize, String, Vec<LineRange>)> {
+        // Pruning doesn't have symbol/task data to compute focused ranges.
+        None
     }
 }
