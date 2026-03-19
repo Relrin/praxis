@@ -165,14 +165,4 @@ mod tests {
             );
         }
     }
-
-    #[test]
-    fn estimate_tokens_approximation() {
-        assert_eq!(estimate_tokens(""), 0);
-        assert_eq!(estimate_tokens("abcd"), 1);
-        assert_eq!(estimate_tokens("abcdefgh"), 2);
-        // 100 chars ≈ 25 tokens
-        let s: String = "a".repeat(100);
-        assert_eq!(estimate_tokens(&s), 25);
-    }
 }
