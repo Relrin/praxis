@@ -1,12 +1,6 @@
 use crate::change::content_hash;
 use crate::types::FileChunk;
 
-/// Estimates token count from text using a simple chars/4 heuristic.
-fn estimate_tokens(text: &str) -> usize {
-    // Rough approximation: 1 token ~= 4 characters for English text
-    (text.len() + 3) / 4
-}
-
 /// Splits file content into overlapping chunks suitable for embedding.
 ///
 /// Each chunk contains at most `max_tokens` estimated tokens, with
