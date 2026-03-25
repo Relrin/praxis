@@ -1,0 +1,117 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact_name: praxis
+            asset_name: praxis-linux-amd64
+
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact_name: praxis
+            asset_name: praxis-linux-arm64
+
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact_name: praxis
+            asset_name: praxis-macos-amd64
+
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact_name: praxis
+            asset_name: praxis-macos-arm64
+
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact_name: praxis.exe
+            asset_name: praxis-windows-amd64.exe
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action/setup@v1
+        with:
+          targets: ${{ matrix.target }}
+
+      # Linux cross-compilation dependencies for aarch64
+      - name: Install cross-compilation tools (aarch64-linux)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Build release binary
+        run: cargo build --release --features vector --target ${{ matrix.target }} -p praxis
+        env:
+          # Linker for aarch64 cross-compilation on Linux
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+
+          # Linux amd64
+          cp artifacts/praxis-linux-amd64/praxis release-assets/praxis-linux-amd64
+          chmod +x release-assets/praxis-linux-amd64
+
+          # Linux arm64
+          cp artifacts/praxis-linux-arm64/praxis release-assets/praxis-linux-arm64
+          chmod +x release-assets/praxis-linux-arm64
+
+          # macOS amd64
+          cp artifacts/praxis-macos-amd64/praxis release-assets/praxis-macos-amd64
+          chmod +x release-assets/praxis-macos-amd64
+
+          # macOS arm64
+          cp artifacts/praxis-macos-arm64/praxis release-assets/praxis-macos-arm64
+          chmod +x release-assets/praxis-macos-arm64
+
+          # Windows
+          cp artifacts/praxis-windows-amd64.exe/praxis.exe release-assets/praxis-windows-amd64.exe
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
