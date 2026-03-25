@@ -29,11 +29,6 @@ jobs:
             artifact_name: praxis
             asset_name: praxis-linux-arm64
 
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            artifact_name: praxis
-            asset_name: praxis-macos-amd64
-
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact_name: praxis
@@ -133,10 +128,6 @@ jobs:
           # Linux arm64
           cp artifacts/praxis-linux-arm64/praxis release-assets/praxis-linux-arm64
           chmod +x release-assets/praxis-linux-arm64
-
-          # macOS amd64
-          cp artifacts/praxis-macos-amd64/praxis release-assets/praxis-macos-amd64
-          chmod +x release-assets/praxis-macos-amd64
 
           # macOS arm64
           cp artifacts/praxis-macos-arm64/praxis release-assets/praxis-macos-arm64
